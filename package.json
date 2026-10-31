@@ -1,6 +1,6 @@
 {
   "name": "transmissao-igreja",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Câmeras pelo celular via navegador + mesa de produção para OBS, num programa instalável",
   "main": "app/main.js",
   "scripts": {
@@ -12,6 +12,8 @@
   "license": "MIT",
   "dependencies": {
     "electron-updater": "^6.8.11",
+    "ffmpeg-static": "^5.3.0",
+    "node-media-server": "^2.7.4",
     "qrcode": "^1.5.4",
     "selfsigned": "^2.4.1",
     "ws": "^8.18.0"
@@ -57,7 +59,10 @@
       "provider": "github",
       "owner": "zenalvesf",
       "repo": "transmissao-igreja"
-    }
+    },
+    "asarUnpack": [
+      "node_modules/ffmpeg-static/**"
+    ]
   },
   "repository": {
     "type": "git",

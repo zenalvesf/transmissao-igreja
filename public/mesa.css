@@ -82,6 +82,32 @@ select.small, button.small { min-height: 36px; padding: 6px 10px; width: auto; f
 .audio .in input { min-height: 0; padding: 0; background: none; border: 0; }
 .audio .in .db { text-align: right; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
 
+.dests { display: flex; flex-direction: column; gap: 10px; }
+.dest { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+.dest .head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.dest .head input[type=text].nome { flex: 1; min-width: 120px; font-weight: 700; font-size: 16px; }
+.dest .head .st { font-size: 13px; padding: 4px 10px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line); white-space: nowrap; }
+.dest .head .st.noar { background: rgba(46,204,113,.15); border-color: var(--ok); color: var(--ok); }
+.dest .head .st.conectando, .dest .head .st.reiniciando { background: rgba(255,153,0,.15); border-color: var(--accent); color: var(--accent); }
+.dest .head .st.erro { background: rgba(255,59,59,.15); border-color: var(--live); color: var(--live); }
+.dest .body { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; margin-top: 10px; }
+.dest .body .full { grid-column: 1 / -1; }
+.dest .body label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 3px; }
+.dest .vert { display: none; }
+.dest.vertical .vert { display: block; }
+.dest .err { grid-column: 1 / -1; font-size: 12px; color: var(--live); white-space: pre-wrap; }
+.dest .tools { grid-column: 1 / -1; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.dest .tools button { min-height: 34px; padding: 4px 10px; font-size: 13px; }
+.dest .sl { display: flex; align-items: center; gap: 8px; }
+.dest .sl input { min-height: 0; padding: 0; background: none; border: 0; flex: 1; }
+.switch { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
+.switch input { width: 20px; height: 20px; min-height: 0; padding: 0; accent-color: var(--ok); }
+#destBadges { display: inline-flex; gap: 6px; }
+#destBadges .badge { font-size: 12px; padding: 3px 8px; }
+#destBadges .badge.ok { border-color: var(--ok); color: var(--ok); }
+#destBadges .badge.warn { border-color: var(--accent); color: var(--accent); }
+#destBadges .badge.err { border-color: var(--live); color: var(--live); }
+
 #toast { position: fixed; left: 50%; bottom: 20px; transform: translate(-50%, 20px); background: var(--panel-2); border: 1px solid var(--line); padding: 12px 18px; border-radius: 10px; opacity: 0; transition: .25s; pointer-events: none; max-width: 90%; z-index: 10; }
 #toast.show { opacity: 1; transform: translate(-50%, 0); }
 #toast.err { border-color: var(--danger); }

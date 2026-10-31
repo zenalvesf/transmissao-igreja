@@ -17,6 +17,7 @@
     <span class="badge" id="srvBadge"><span class="dot"></span>Servidor</span>
     <span class="badge" id="streamBadge">Fora do ar</span>
     <span class="muted" id="streamInfo"></span>
+    <span id="destBadges"></span>
   </div>
   <div class="actions">
     <button id="btnRecord" title="Gravar localmente">⏺ Gravar</button>
@@ -55,6 +56,7 @@
       <button data-tab="legendas">🔤 Legendas</button>
       <button data-tab="cameras">📱 Câmeras</button>
       <button data-tab="audio">🎚️ Áudio</button>
+      <button data-tab="destinos">📡 Destinos</button>
       <button data-tab="config">⚙️ Config</button>
     </nav>
 
@@ -177,6 +179,29 @@
       <div class="card">
         <div class="row between"><h2 style="margin:0">Mixer</h2><button id="btnAudioRefresh" class="ghost small">↻ Atualizar</button></div>
         <div id="audioList" class="audio"></div>
+      </div>
+    </div>
+
+    <!-- Destinos (multidestino) -->
+    <div class="tab" id="tab-destinos">
+      <div class="card">
+        <h2>YouTube + Instagram ao mesmo tempo</h2>
+        <p class="muted" style="margin-top:0">O OBS transmite uma vez para este programa, e ele reenvia para cada destino abaixo. Se um destino cair, só ele reconecta; os outros continuam.</p>
+        <div id="relayObs" class="obs-local">
+          <div id="relayObsMsg" class="muted">Verificando para onde o OBS está transmitindo…</div>
+          <div class="row" style="margin-top:8px;gap:8px;flex-wrap:wrap">
+            <button id="relayPointObs" class="primary small" hidden>Apontar o OBS para este programa</button>
+          </div>
+        </div>
+        <p class="muted" id="relayHint" style="margin-bottom:0"></p>
+      </div>
+      <div id="destList" class="dests"></div>
+      <div class="row" style="gap:8px;flex-wrap:wrap">
+        <button id="destAdd" class="small">+ Adicionar destino</button>
+        <label class="inline muted">Codificador do recorte vertical
+          <select id="relayEncoder" class="small"><option value="auto">Automático</option></select>
+        </label>
+        <button id="destSave" class="primary">Salvar destinos</button>
       </div>
     </div>
 

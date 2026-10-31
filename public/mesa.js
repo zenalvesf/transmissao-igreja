@@ -10,6 +10,7 @@
     overlay: {}, roteiro: { itens: [], atual: -1 }, presets: { legendas: [], versiculos: [], avisos: [] },
     cams: [], config: null, info: null, editing: false, audioInputs: [],
     tally: {}, // nome da câmera -> true/false
+    relay: null, // estado do multidestino
   };
   const pending = new Map(); let reqId = 1;
 
@@ -45,14 +46,15 @@
         m.ok ? p.resolve(m.data) : p.reject(new Error(m.error));
         break;
       }
-      case 'obsStatus': S.obs = m.connected; refreshObsLocal(); setBadge($('#obsBadge'), m.connected ? 'ok' : 'danger', 'OBS'); $('#cfgObsMsg').textContent = m.connected ? 'Conectado ✔' : (m.error ? 'Erro: ' + m.error : 'Desconectado'); if (m.connected) refreshObs(); break;
+      case 'obsStatus': S.obs = m.connected; refreshObsLocal(); if (m.connected) setTimeout(refreshRelayObs, 500); setBadge($('#obsBadge'), m.connected ? 'ok' : 'danger', 'OBS'); $('#cfgObsMsg').textContent = m.connected ? 'Conectado ✔' : (m.error ? 'Erro: ' + m.error : 'Desconectado'); if (m.connected) refreshObs(); break;
       case 'obsEvent': onObsEvent(m.event, m.data); break;
       case 'overlay': S.overlay = m.overlay; renderOverlayState(); break;
       case 'roteiro': S.roteiro = m.roteiro; renderRoteiro(); break;
       case 'presets': S.presets = m.presets; renderPresets(); break;
       case 'cams': S.cams = m.cams; renderCams(); updateTally(); break;
       case 'camStats': { const c = S.cams.find((x) => x.id === m.id); if (c) { c.meta = Object.assign({}, c.meta, m.stats); renderCams(); } break; }
-      case 'config': S.config = m.config; renderConfig(); break;
+      case 'config': S.config = m.config; renderConfig(); renderDests(); break;
+      case 'relay': S.relay = m.state; renderRelay(); break;
       default: break;
     }
   }
@@ -431,6 +433,120 @@
     $('#cfgPwdHint').textContent = c.obs.hasPassword ? '(já salva)' : '(nenhuma)';
     $('#cfgCams').value = (c.cameraNames || []).join('\n');
   }
+  // ---- Multidestino (YouTube + Instagram)
+  const EST_LABEL = { parado: 'parado', conectando: 'conectando…', 'no ar': 'NO AR', reiniciando: 'reconectando…', erro: 'erro' };
+  let destDirty = false;
+  function destEl(id) { return $('#destList').querySelector(`.dest[data-id="${CSS.escape(id)}"]`); }
+
+  function renderDests() {
+    if (!S.config || destDirty) return;
+    const list = $('#destList'); list.innerHTML = '';
+    for (const d of S.config.relay.destinos) {
+      const card = el('div', { class: 'dest' + (d.modo === 'vertical' ? ' vertical' : ''), 'data-id': d.id });
+      card.innerHTML = `
+        <div class="head">
+          <label class="switch"><input type="checkbox" class="ativo" ${d.ativo ? 'checked' : ''}> ligado</label>
+          <input type="text" class="nome" value="">
+          <span class="st parado">parado</span>
+          <span class="muted kb"></span>
+        </div>
+        <div class="body">
+          <div class="full"><label>Servidor (URL RTMP)</label><input type="text" class="url" placeholder="rtmp://..."></div>
+          <div class="full"><label>Chave da transmissão <span class="muted hint"></span></label><input type="password" class="key" placeholder="${d.hasKey ? 'deixe em branco para manter' : 'cole a chave aqui'}"></div>
+          <div><label>Formato</label><select class="modo"><option value="copy">Mesmo vídeo do OBS (16:9, sem recodificar)</option><option value="vertical">Recorte vertical 9:16 (Instagram)</option></select></div>
+          <div class="vert"><label>Resolução</label><select class="res"><option value="720">720×1280</option><option value="1080">1080×1920</option></select></div>
+          <div class="vert"><label>Bitrate (kbps)</label><input type="number" class="bitrate" min="800" max="8000" step="100"></div>
+          <div class="vert full"><label>Posição do recorte (esquerda ↔ direita)</label><div class="sl"><span>◀</span><input type="range" class="cropX" min="0" max="1" step="0.01"><span>▶</span></div></div>
+          <div class="err" hidden></div>
+          <div class="tools"><button class="restart">Reiniciar envio</button><button class="logbtn ghost">Ver log</button><button class="remove ghost">Remover</button><pre class="log-box log"></pre></div>
+        </div>`;
+      card.querySelector('.nome').value = d.nome || d.id;
+      card.querySelector('.url').value = d.url || '';
+      card.querySelector('.hint').textContent = d.hasKey ? '(salva ' + d.keyHint + ')' : '';
+      card.querySelector('.modo').value = d.modo || 'copy';
+      card.querySelector('.res').value = String(d.res || 720);
+      card.querySelector('.bitrate').value = d.bitrate || 2500;
+      card.querySelector('.cropX').value = d.cropX ?? 0.5;
+      card.querySelector('.modo').addEventListener('change', (e) => card.classList.toggle('vertical', e.target.value === 'vertical'));
+      card.querySelector('.restart').addEventListener('click', () => fetch('/api/relay/restart/' + encodeURIComponent(d.id), { method: 'POST' }).then(() => toast('Reiniciando ' + (d.nome || d.id))));
+      card.querySelector('.logbtn').addEventListener('click', async () => {
+        const box = card.querySelector('.log-box'); box.classList.toggle('show');
+        if (box.classList.contains('show')) { const r = await (await fetch('/api/relay/log/' + encodeURIComponent(d.id))).json(); box.textContent = r.lines.join('\n') || '(sem mensagens)'; }
+      });
+      card.querySelector('.remove').addEventListener('click', () => { if (confirm('Remover o destino ' + (d.nome || d.id) + '?')) { card.remove(); destDirty = true; } });
+      for (const inp of card.querySelectorAll('input, select')) inp.addEventListener('input', () => { destDirty = true; });
+      list.appendChild(card);
+    }
+    renderRelay();
+  }
+
+  function readDests() {
+    const out = [];
+    for (const card of $$('#destList .dest')) {
+      const key = card.querySelector('.key').value;
+      out.push({
+        id: card.dataset.id, nome: card.querySelector('.nome').value, ativo: card.querySelector('.ativo').checked,
+        url: card.querySelector('.url').value, key, modo: card.querySelector('.modo').value,
+        res: Number(card.querySelector('.res').value), bitrate: Number(card.querySelector('.bitrate').value), cropX: Number(card.querySelector('.cropX').value),
+      });
+    }
+    return out;
+  }
+
+  function renderRelay() {
+    const st = S.relay; if (!st) return;
+    const enc = $('#relayEncoder');
+    if (enc.options.length <= 1) for (const e of st.encoders) enc.appendChild(el('option', { value: e }, e));
+    if (S.config && !destDirty) enc.value = S.config.relay.encoder || 'auto';
+    $('#relayHint').textContent = st.ffmpegOk
+      ? (st.live ? 'O OBS está enviando para este programa. ' : 'Aguardando o OBS iniciar a transmissão. ') + 'Codificador do recorte vertical em uso: ' + st.encoder + '.'
+      : 'ffmpeg não encontrado: o reenvio não vai funcionar. Reinstale o programa.';
+    const badges = [];
+    for (const [id, s] of Object.entries(st.destinos)) {
+      const d = (S.config ? S.config.relay.destinos : []).find((x) => x.id === id) || { nome: id };
+      const card = destEl(id);
+      if (card) {
+        const stEl = card.querySelector('.st'); stEl.textContent = EST_LABEL[s.estado] || s.estado; stEl.className = 'st ' + (s.estado === 'no ar' ? 'noar' : s.estado);
+        card.querySelector('.kb').textContent = s.estado === 'no ar' ? `${s.kbps} kbps · ${s.fps ? s.fps + ' fps · ' : ''}${s.tempo}` : (s.tentativas ? `tentativa ${s.tentativas}` : '');
+        const err = card.querySelector('.err'); err.hidden = !s.erro; err.textContent = s.erro || '';
+      }
+      if (d.ativo) badges.push(`<span class="badge ${s.estado === 'no ar' ? 'ok' : s.estado === 'erro' ? 'err' : 'warn'}">${(d.nome || id).slice(0, 10)} ${s.estado === 'no ar' ? '●' : '○'}</span>`);
+    }
+    $('#destBadges').innerHTML = badges.join('');
+  }
+
+  $('#destSave').addEventListener('click', async () => {
+    const body = { destinos: readDests(), encoder: $('#relayEncoder').value };
+    destDirty = false;
+    const r = await (await fetch('/api/relay/destinos', { method: 'PUT', body: JSON.stringify(body) })).json();
+    if (r.error) { toast('Erro: ' + r.error, true); return; }
+    S.config = r; renderDests(); toast('Destinos salvos');
+  });
+  $('#destAdd').addEventListener('click', () => {
+    if (!S.config) return;
+    const id = 'dest' + Date.now().toString(36);
+    S.config.relay.destinos.push({ id, nome: 'Novo destino', ativo: false, url: '', modo: 'copy', res: 720, bitrate: 2500, cropX: 0.5 });
+    destDirty = false; renderDests(); destDirty = true;
+  });
+
+  async function refreshRelayObs() {
+    if (!S.obs) { $('#relayObsMsg').textContent = 'OBS desconectado.'; $('#relayPointObs').hidden = true; return; }
+    try {
+      const s = await obs('GetStreamServiceSettings');
+      const want = S.relay ? S.relay.rtmpUrl : 'rtmp://127.0.0.1:1935/live';
+      const cur = (s.streamServiceSettings || {}).server || '';
+      const ok = s.streamServiceType === 'rtmp_custom' && cur.replace(/\/+$/, '') === want;
+      $('#relayObsMsg').innerHTML = ok ? 'O OBS está configurado para transmitir <b>para este programa</b> ✔' : 'O OBS está transmitindo para: <b>' + (cur || s.streamServiceType || 'nada configurado') + '</b>. Para usar o multidestino, aponte-o para este programa.';
+      $('#relayPointObs').hidden = ok;
+    } catch (e) { $('#relayObsMsg').textContent = 'Não consegui ler a configuração do OBS: ' + e.message; }
+  }
+  $('#relayPointObs').addEventListener('click', async () => {
+    try {
+      await obs('SetStreamServiceSettings', { streamServiceType: 'rtmp_custom', streamServiceSettings: { server: S.relay.rtmpUrl, key: S.relay.streamKey, use_auth: false } });
+      toast('OBS apontado para este programa'); refreshRelayObs();
+    } catch (e) { toast('Erro: ' + e.message, true); }
+  });
+
   // ---- OBS instalado neste computador
   async function refreshObsLocal() {
     let st;
@@ -476,6 +592,7 @@
 
   // ------------------------------------------------------------ abas, badges, toast
   for (const b of $$('.tabs button')) b.addEventListener('click', () => {
+    if (b.dataset.tab === 'destinos') refreshRelayObs();
     for (const x of $$('.tabs button')) x.classList.toggle('active', x === b);
     for (const t of $$('.tab')) t.classList.toggle('active', t.id === 'tab-' + b.dataset.tab);
     if (b.dataset.tab === 'audio') refreshAudio();

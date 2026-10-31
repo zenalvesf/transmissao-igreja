@@ -42,6 +42,14 @@ const DEFAULT_CONFIG = {
   cameraNames: ['Celular 1', 'Celular 2'],
   viewWidth: 1920,
   viewHeight: 1080,
+  relay: {
+    rtmpPort: 1935,
+    encoder: 'auto', // codificador do recorte vertical: auto | libx264 | h264_nvenc | h264_qsv | h264_amf
+    destinos: [
+      { id: 'youtube', nome: 'YouTube', ativo: false, url: 'rtmp://a.rtmp.youtube.com/live2', key: '', modo: 'copy' },
+      { id: 'instagram', nome: 'Instagram', ativo: false, url: '', key: '', modo: 'vertical', cropX: 0.5, res: 720, bitrate: 2500 },
+    ],
+  },
 };
 
 function readJson(file, fallback) {
@@ -54,6 +62,8 @@ function writeJson(file, obj) {
 
 let config = Object.assign({}, DEFAULT_CONFIG, readJson(CONFIG_PATH, {}));
 config.obs = Object.assign({}, DEFAULT_CONFIG.obs, config.obs || {});
+config.relay = Object.assign({}, DEFAULT_CONFIG.relay, config.relay || {});
+if (!Array.isArray(config.relay.destinos)) config.relay.destinos = JSON.parse(JSON.stringify(DEFAULT_CONFIG.relay.destinos));
 if (!fs.existsSync(CONFIG_PATH)) writeJson(CONFIG_PATH, config);
 
 // ---------------------------------------------------------------- estado persistente
@@ -153,6 +163,7 @@ function publicConfig() {
   const safe = JSON.parse(JSON.stringify(config));
   safe.obs.hasPassword = !!safe.obs.password;
   delete safe.obs.password;
+  for (const d of safe.relay.destinos) { d.hasKey = !!d.key; d.keyHint = d.key ? '••••' + d.key.slice(-4) : ''; delete d.key; }
   return safe;
 }
 
@@ -197,6 +208,40 @@ async function handleApi(req, res, p) {
         broadcast('mesa', { type: 'config', config: publicConfig() });
       }
       return sendJson(res, publicConfig());
+    }
+    // Multidestino (relay)
+    if (p === '/api/relay') return sendJson(res, relay.state());
+    if (p === '/api/relay/destinos' && req.method === 'PUT') {
+      const body = await readBody(req);
+      if (body.encoder) config.relay.encoder = String(body.encoder);
+      if (Array.isArray(body.destinos)) {
+        const old = new Map(config.relay.destinos.map((d) => [d.id, d]));
+        config.relay.destinos = body.destinos.filter((d) => d && d.id).map((d) => {
+          const prev = old.get(d.id) || {};
+          const nd = {
+            id: String(d.id), nome: String(d.nome || d.id).trim() || d.id, ativo: !!d.ativo,
+            url: String(d.url || '').trim(), modo: d.modo === 'vertical' ? 'vertical' : 'copy',
+            cropX: Math.min(1, Math.max(0, Number(d.cropX ?? prev.cropX ?? 0.5))),
+            res: Number(d.res) === 1080 ? 1080 : 720, bitrate: Number(d.bitrate) || prev.bitrate || 2500,
+            key: typeof d.key === 'string' && d.key.trim() ? d.key.trim() : (prev.key || ''),
+          };
+          if (d.key === '') nd.key = prev.key || ''; // em branco = manter
+          if (d.limparKey) nd.key = '';
+          return nd;
+        });
+      }
+      writeJson(CONFIG_PATH, config);
+      relay.applyConfig();
+      broadcast('mesa', { type: 'config', config: publicConfig() });
+      return sendJson(res, publicConfig());
+    }
+    {
+      const m = p.match(/^\/api\/relay\/(restart|log)\/([^/]+)$/);
+      if (m) {
+        const id = decodeURIComponent(m[2]);
+        if (m[1] === 'restart') { relay.restartDest(id); return sendJson(res, { ok: true }); }
+        return sendJson(res, { lines: relay.logOf(id) });
+      }
     }
     // OBS instalado neste computador
     if (p === '/api/obs/local') {
@@ -273,6 +318,7 @@ function onWsMessage(c, raw) {
         wsSend(c.ws, { type: 'presets', presets });
         wsSend(c.ws, { type: 'config', config: publicConfig() });
         wsSend(c.ws, { type: 'obsStatus', connected: obs.connected, error: obs.lastError });
+        wsSend(c.ws, { type: 'relay', state: relay.state() });
       } else if (c.role === 'overlay') {
         wsSend(c.ws, { type: 'overlay', overlay });
       }
@@ -417,6 +463,12 @@ class ObsClient {
 }
 const obs = new ObsClient();
 obs.connect();
+
+// ---------------------------------------------------------------- multidestino
+const { Relay } = require('./relay');
+const relay = new Relay(() => config.relay);
+relay.on('state', (state) => broadcast('mesa', { type: 'relay', state }));
+relay.start();
 
 // ---------------------------------------------------------------- start
 const httpServer = http.createServer(handleHttp);

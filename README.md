@@ -56,8 +56,9 @@ Para publicar uma versão: aumente `version` em `package.json`, rode `npm run di
 
 1. Abra o **Transmissao Igreja** (atalho na área de trabalho) ou, no modo manual, o `iniciar.bat`. Abra o OBS pela aba Config, se ainda não estiver aberto.
 2. **Celulares:** leia o QR code da página inicial (ou da aba Câmeras da mesa). O navegador vai avisar que o certificado não é confiável: toque em **Avançado → Continuar** (no iPhone: **Mostrar detalhes → Visitar este site**). Isso acontece só na primeira vez em cada aparelho. Escolha o nome da câmera, confira a qualidade e toque em **Iniciar câmera**. Deixe o celular no tripé carregando; a tela fica ligada sozinha.
-3. **Mesa:** abra http://localhost:8080/mesa no PC, ou `http://IP-DO-PC:8080/mesa` em um tablet.
-4. Siga o **Roteiro**: o botão **Próximo** troca a cena e dispara a legenda configurada em cada item. Teclas **1 a 9** trocam cenas, **Espaço** avança o roteiro.
+3. **Destinos:** se usar YouTube + Instagram, confira na aba Destinos se os dois estão ligados e com a chave do dia (a do Instagram muda a cada live).
+4. **Mesa:** abra http://localhost:8080/mesa no PC, ou `http://IP-DO-PC:8080/mesa` em um tablet.
+5. Siga o **Roteiro**: o botão **Próximo** troca a cena e dispara a legenda configurada em cada item. Teclas **1 a 9** trocam cenas, **Espaço** avança o roteiro.
 
 ### Tally (luz de "no ar")
 Quando a cena no ar contém a fonte de um celular, a tela desse celular ganha uma borda vermelha e o aviso **NO AR**. Isso usa o nome da câmera: a fonte no OBS precisa conter o nome (ex.: `Celular 1 (celular)`), que é como a configuração automática já cria.
@@ -69,15 +70,20 @@ Quando a cena no ar contém a fonte de um celular, a tela desse celular ganha um
 - Em **Configurações → Vídeo**, resolução de saída 1280×720 reduz muito a carga.
 - Fontes de navegador consomem CPU. Mantenha só as necessárias e desmarque "Desligar fonte quando não visível" para evitar reconexões.
 
-## YouTube + Instagram ao mesmo tempo
+## YouTube + Instagram ao mesmo tempo (multidestino)
 
-O OBS nativo transmite para um destino só. Para YouTube e Instagram juntos, as opções mais usadas:
+O programa tem um **multidestino** embutido: o OBS transmite uma única vez para ele, e ele reenvia para cada destino. Se um destino cair, só ele reconecta; os outros continuam. Tudo fica na aba **Destinos** da mesa.
 
-- **Plugin "Multiple RTMP outputs"** (obs-multi-rtmp): grátis, adiciona um painel no OBS para enviar o mesmo vídeo para mais de um servidor RTMP. Instagram em 16:9 fica com barras pretas.
-- **Plugin "Aitum Vertical"**: cria uma tela 9:16 separada dentro do OBS, ideal para o Instagram, usada junto com o Multi‑RTMP.
-- **Serviço de restream** (Restream.io, Streamlabs): você envia uma vez e eles reenviam. Mais simples, mas depende de assinatura para vários destinos.
+1. Aba **Destinos** → **Apontar o OBS para este programa**. Isso configura o OBS (Configurações → Transmissão) para enviar para `rtmp://127.0.0.1:1935/live`, chave `obs`. Só precisa fazer uma vez.
+2. **YouTube**: ligue o destino e cole a chave de transmissão do YouTube Studio. O servidor padrão já está preenchido. Formato "Mesmo vídeo do OBS": sem recodificar, não pesa no PC.
+3. **Instagram**: no computador, Instagram → Criar → **Transmissão ao vivo** → *Software de transmissão*. Copie o **URL do servidor** (começa com `rtmps://`) e a **chave** para o destino Instagram. Formato "Recorte vertical 9:16": o programa recorta uma faixa vertical do vídeo e manda em 720×1280 (ou 1080×1920). Ajuste a **posição do recorte** com a barra (por exemplo, para enquadrar o púlpito). A chave do Instagram muda a cada live.
+4. **Salvar destinos** e, no topo, **Iniciar transmissão**. Os selos no cabeçalho (YouTube ●, Instagram ●) mostram cada destino no ar.
 
-Para o Instagram pelo OBS é preciso uma **conta profissional** e pegar a chave RTMP em *Instagram → Criar → Transmissão ao vivo → Software de transmissão*, no computador. A chave muda a cada live.
+Dá para adicionar outros destinos (Facebook, site da igreja etc.) com **+ Adicionar destino**. Chaves de transmissão ficam salvas no PC e nunca aparecem na tela.
+
+**Recorte vertical e o PC antigo.** O recorte precisa recodificar o vídeo. O programa usa a placa de vídeo quando existe (NVIDIA NVENC, Intel QuickSync ou AMD AMF, testados nessa ordem e escolhidos sozinho) e só cai no processador (libx264) se não houver nenhuma. Se o PC sofrer, use 720×1280 e 2000 kbps, ou mude o Instagram para "Mesmo vídeo do OBS" (fica 16:9 com barras, sem recodificar).
+
+**Como funciona por dentro:** servidor RTMP local (node-media-server) na porta 1935 + um processo ffmpeg por destino, com reinício automático e espera crescente (3 s, 6 s… até 30 s) quando cai. O ffmpeg vem dentro do instalador.
 
 ## Holyrics
 
@@ -92,6 +98,7 @@ transmissao-igreja/
   iniciar.bat      modo manual: inicia só o servidor com Node.js
   server.js        servidor: páginas, sinalização WebRTC, conexão com o OBS
   obs-local.js     acha o OBS instalado, lê a senha do WebSocket, abre o OBS
+  relay.js         multidestino: recebe do OBS (RTMP) e reenvia para YouTube/Instagram
   config.json      portas, senha do OBS, nomes das câmeras (gerado na primeira execução)
   data/            roteiro.json e presets.json de exemplo (o programa copia para %APPDATA%)
   certs/           certificado HTTPS gerado automaticamente (modo manual)
@@ -118,5 +125,6 @@ transmissao-igreja/
 - **O OBS fica vermelho na mesa.** Na aba Config veja o que ela diz sobre o OBS: se estiver fechado, use **Abrir OBS**; se o WebSocket estiver desligado, **Habilitar WebSocket do OBS** e reabra o OBS. Se mudou a senha no OBS, salve-a em "Configurar manualmente".
 - **O Windows perguntou sobre o firewall.** Permita em redes **privadas**; sem isso os celulares não alcançam o PC.
 - **A imagem no OBS congela.** Na aba Câmeras clique em **Reiniciar vídeo** no celular correspondente. Se cair muito, aproxime o roteador ou use 540p.
+- **Um destino fica em "reconectando".** Clique em **Ver log** no destino para ver a mensagem do ffmpeg: normalmente é chave errada ou vencida (Instagram) ou internet sem banda para dois envios. O outro destino não é afetado.
 - **Wi‑Fi com "isolamento de clientes" (comum em roteadores de visitante)** impede celular e PC de se verem. Use a rede principal.
 - **Dois celulares com o mesmo nome.** O último que entrar substitui o anterior. Dê nomes diferentes na aba Config.
