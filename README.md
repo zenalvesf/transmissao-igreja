@@ -35,7 +35,9 @@ npm run dist
 
 O instalador sai em `dist/TransmissaoIgreja-Setup-<versão>.exe`. Para testar sem gerar o instalador: `npm run app`.
 
-**Atualização automática:** quando o projeto estiver num repositório do GitHub, troque o campo `build.publish` em `package.json` já aponta para github.com/zenalvesf/transmissao-igreja; publique as versões como *Releases* (`npx electron-builder --win --publish always` com a variável `GH_TOKEN`). O programa instalado passa a baixar a versão nova sozinho e instala ao sair.
+**Atualização automática:** o campo `build.publish` em `package.json` aponta para github.com/zenalvesf/transmissao-igreja. Publique cada versão como *Release* nesse repositório (ver abaixo). O programa instalado baixa a versão nova sozinho e instala ao sair. Para isso o repositório precisa ser **público**.
+
+Para publicar uma versão: aumente `version` em `package.json`, rode `npm run dist` e depois `gh release create v<versão> dist/TransmissaoIgreja-Setup-<versão>.exe dist/*.blockmap dist/latest.yml`.
 
 ## Instalação sem o programa (modo manual, com Node.js)
 
