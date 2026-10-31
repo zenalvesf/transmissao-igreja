@@ -1,0 +1,53 @@
+{
+  "itens": [
+    {
+      "titulo": "Contagem regressiva",
+      "cena": "Abertura",
+      "acao": {
+        "tipo": "countdown",
+        "minutes": 5,
+        "message": "O culto começa em instantes"
+      }
+    },
+    {
+      "titulo": "Boas-vindas",
+      "cena": "Abertura",
+      "acao": {
+        "tipo": "title",
+        "text": "Culto de Celebração"
+      }
+    },
+    {
+      "titulo": "Louvor",
+      "cena": "Louvor",
+      "acao": {
+        "tipo": "clear"
+      }
+    },
+    {
+      "titulo": "Pregação",
+      "cena": "Pregação",
+      "acao": {
+        "tipo": "lower",
+        "title": "Pr. Nome do Pregador",
+        "subtitle": "Pastor"
+      }
+    },
+    {
+      "titulo": "Avisos",
+      "cena": "Abertura",
+      "acao": {
+        "tipo": "ticker",
+        "text": "Culto de oração quarta às 19h30"
+      }
+    },
+    {
+      "titulo": "Encerramento",
+      "cena": "Abertura",
+      "acao": {
+        "tipo": "clear"
+      }
+    }
+  ],
+  "atual": -1
+}

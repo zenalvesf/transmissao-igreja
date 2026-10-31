@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Transmissão Igreja</title>
+<link rel="stylesheet" href="/common.css">
+<style>
+  main { max-width: 900px; margin: 0 auto; padding: 32px 18px; }
+  .links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin: 20px 0; }
+  .links a { display: block; text-decoration: none; color: inherit; }
+  .links .card { height: 100%; }
+  .links .card:hover { border-color: var(--accent); }
+  .links .big { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
+  .qrs { display: flex; flex-wrap: wrap; gap: 16px; }
+  .qr { background: #fff; color: #000; padding: 12px; border-radius: 12px; display: inline-flex; flex-direction: column; align-items: center; gap: 8px; font-size: 13px; }
+  code { background: var(--panel-2); padding: 2px 6px; border-radius: 6px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>⛪ Transmissão Igreja</h1>
+  <p class="muted">Servidor ativo. Escolha o que você quer abrir.</p>
+
+  <div class="links">
+    <a href="/mesa"><div class="card"><div class="big">🎛️ Mesa de transmissão</div><div class="muted">Troca de cenas, legendas, roteiro, câmeras e áudio. Abra no PC ou em um tablet.</div></div></a>
+    <a href="/cam"><div class="card"><div class="big">📱 Câmera (celular)</div><div class="muted">Abra no celular pelo QR code abaixo. Precisa do endereço https.</div></div></a>
+    <a href="/overlay" target="_blank"><div class="card"><div class="big">🔤 Overlay</div><div class="muted">Fonte de navegador do OBS com legendas, versículos e avisos.</div></div></a>
+  </div>
+
+  <div class="card">
+    <h2>Conectar celulares</h2>
+    <p class="muted">No celular, leia o QR code. O navegador vai avisar que o certificado não é confiável: toque em "Avançado" → "Continuar" (no iPhone: "Mostrar detalhes" → "Visitar este site"). Isso só acontece na primeira vez.</p>
+    <div class="qrs" id="qrs"></div>
+  </div>
+
+  <div class="card" style="margin-top:14px">
+    <h2>Endereços para o OBS</h2>
+    <div id="urls" class="muted" style="font-family:monospace;font-size:13px;line-height:1.8"></div>
+  </div>
+</main>
+<script>
+fetch('/api/info').then(r => r.json()).then(info => {
+  const qrs = document.getElementById('qrs');
+  for (const { ip, iface } of info.ips) {
+    const url = `https://${ip}:${info.httpsPort}/cam`;
+    const box = document.createElement('div'); box.className = 'qr';
+    const img = document.createElement('img'); img.src = '/qr.svg?text=' + encodeURIComponent(url); img.width = 200; img.height = 200;
+    const label = document.createElement('div'); label.innerHTML = `<b>${iface}</b><br>${url}`;
+    box.append(img, label); qrs.append(box);
+  }
+  const urls = document.getElementById('urls');
+  const base = `http://localhost:${info.httpPort}`;
+  const lines = [`Overlay (legendas): ${base}/overlay`];
+  for (const n of info.cameraNames) lines.push(`${n}: ${base}/view/${encodeURIComponent(n)}`);
+  urls.innerHTML = lines.map(l => l.replace(/(http\S+)/, '<code>$1</code>')).join('<br>');
+});
+</script>
+</body>
+</html>

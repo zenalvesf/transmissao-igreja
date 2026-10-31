@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<title>Mesa de Transmissão</title>
+<link rel="stylesheet" href="/common.css">
+<link rel="stylesheet" href="/mesa.css">
+</head>
+<body>
+
+<header id="top">
+  <div class="brand"><span class="logo">⛪</span> <span>Mesa de Transmissão</span></div>
+  <div class="status">
+    <span class="badge" id="obsBadge"><span class="dot"></span>OBS</span>
+    <span class="badge" id="srvBadge"><span class="dot"></span>Servidor</span>
+    <span class="badge" id="streamBadge">Fora do ar</span>
+    <span class="muted" id="streamInfo"></span>
+  </div>
+  <div class="actions">
+    <button id="btnRecord" title="Gravar localmente">⏺ Gravar</button>
+    <button id="btnStream" class="ok">▶ Iniciar transmissão</button>
+  </div>
+</header>
+
+<main id="main">
+  <!-- ---------------- Programa e cenas ---------------- -->
+  <section id="program">
+    <div class="card preview-card">
+      <div class="preview"><img id="preview" alt=""><div id="previewLabel" class="preview-label"></div></div>
+      <div class="row stats-row">
+        <span id="statCpu" class="muted">CPU –</span>
+        <span id="statFps" class="muted">– fps</span>
+        <span id="statDropped" class="muted">quadros perdidos: –</span>
+        <span id="statBitrate" class="muted">–</span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="row between">
+        <h3>Cenas <span class="muted" id="sceneHint">(teclas 1–9)</span></h3>
+        <div class="row">
+          <label class="inline">Transição</label>
+          <select id="transition" class="small"></select>
+        </div>
+      </div>
+      <div id="scenes" class="scenes"></div>
+    </div>
+  </section>
+
+  <!-- ---------------- Painel lateral ---------------- -->
+  <section id="side">
+    <nav class="tabs">
+      <button data-tab="roteiro" class="active">📋 Roteiro</button>
+      <button data-tab="legendas">🔤 Legendas</button>
+      <button data-tab="cameras">📱 Câmeras</button>
+      <button data-tab="audio">🎚️ Áudio</button>
+      <button data-tab="config">⚙️ Config</button>
+    </nav>
+
+    <!-- Roteiro -->
+    <div class="tab active" id="tab-roteiro">
+      <div class="card">
+        <div class="row between">
+          <h2 style="margin:0">Roteiro do culto</h2>
+          <button id="btnEditRoteiro" class="ghost small">✏️ Editar</button>
+        </div>
+        <div class="row nav-row">
+          <button id="btnPrev">◀ Anterior</button>
+          <button id="btnNext" class="primary grow">Próximo ▶</button>
+        </div>
+        <ol id="roteiroList" class="roteiro"></ol>
+        <div id="roteiroEdit" class="edit-box" style="display:none">
+          <h3>Novo item</h3>
+          <div class="field"><label>Título (ex.: Louvor, Pregação, Avisos)</label><input id="riTitulo"></div>
+          <div class="grid2">
+            <div class="field"><label>Trocar para a cena</label><select id="riCena"><option value="">(não trocar)</option></select></div>
+            <div class="field"><label>Ação de legenda</label>
+              <select id="riAcao">
+                <option value="none">Nenhuma</option>
+                <option value="clear">Limpar legendas</option>
+                <option value="lower">Mostrar legenda inferior</option>
+                <option value="verse">Mostrar versículo</option>
+                <option value="title">Mostrar título central</option>
+                <option value="ticker">Mostrar aviso rolante</option>
+                <option value="countdown">Contagem regressiva</option>
+              </select>
+            </div>
+          </div>
+          <div id="riFields"></div>
+          <div class="row">
+            <button id="riAdd" class="primary">Adicionar ao roteiro</button>
+            <button id="riClear" class="ghost">Limpar roteiro</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Legendas -->
+    <div class="tab" id="tab-legendas">
+      <div class="card">
+        <div class="row between"><h2 style="margin:0">Legenda inferior</h2><span class="badge" id="ltState">oculta</span></div>
+        <div class="field"><label>Nome / título</label><input id="ltTitle" placeholder="Pr. João da Silva"></div>
+        <div class="field"><label>Função / subtítulo</label><input id="ltSubtitle" placeholder="Pastor presidente"></div>
+        <div class="row">
+          <button id="ltShow" class="primary">Mostrar</button>
+          <button id="ltHide">Ocultar</button>
+          <button id="ltSave" class="ghost">💾 Salvar modelo</button>
+        </div>
+        <div id="ltPresets" class="presets"></div>
+      </div>
+
+      <div class="card">
+        <div class="row between"><h2 style="margin:0">Versículo</h2><span class="badge" id="vsState">oculto</span></div>
+        <div class="field"><label>Referência</label><input id="vsRef" placeholder="João 3:16"></div>
+        <div class="field"><label>Texto</label><textarea id="vsText" placeholder="Porque Deus amou o mundo de tal maneira…"></textarea></div>
+        <div class="row">
+          <button id="vsShow" class="primary">Mostrar</button>
+          <button id="vsHide">Ocultar</button>
+          <button id="vsSave" class="ghost">💾 Salvar</button>
+        </div>
+        <div id="vsPresets" class="presets"></div>
+      </div>
+
+      <div class="card">
+        <div class="row between"><h2 style="margin:0">Aviso rolante</h2><span class="badge" id="tkState">oculto</span></div>
+        <div class="field"><input id="tkText" placeholder="Culto de oração quarta às 19h30 · Contribua pelo PIX da igreja"></div>
+        <div class="row">
+          <button id="tkShow" class="primary">Mostrar</button>
+          <button id="tkHide">Ocultar</button>
+          <button id="tkSave" class="ghost">💾 Salvar</button>
+        </div>
+        <div id="tkPresets" class="presets"></div>
+      </div>
+
+      <div class="card">
+        <div class="row between"><h2 style="margin:0">Título central</h2><span class="badge" id="ttState">oculto</span></div>
+        <div class="field"><input id="ttText" placeholder="Culto de Celebração"></div>
+        <div class="row"><button id="ttShow" class="primary">Mostrar</button><button id="ttHide">Ocultar</button></div>
+      </div>
+
+      <div class="card">
+        <div class="row between"><h2 style="margin:0">Contagem regressiva</h2><span class="badge" id="cdState">oculta</span></div>
+        <div class="grid2">
+          <div class="field"><label>Minutos a partir de agora</label><input id="cdMinutes" type="number" min="0" value="5"></div>
+          <div class="field"><label>ou até o horário</label><input id="cdTime" type="time"></div>
+        </div>
+        <div class="field"><label>Mensagem</label><input id="cdMsg" value="O culto começa em instantes"></div>
+        <div class="row"><button id="cdShow" class="primary">Iniciar</button><button id="cdHide">Ocultar</button></div>
+      </div>
+
+      <button id="clearAll" class="danger wide">Limpar todas as legendas da tela</button>
+    </div>
+
+    <!-- Câmeras -->
+    <div class="tab" id="tab-cameras">
+      <div class="card">
+        <h2>Celulares conectados</h2>
+        <div id="camList" class="cams"><p class="muted">Nenhum celular conectado. Abra o endereço abaixo no celular.</p></div>
+      </div>
+      <div class="card">
+        <h2>Conectar um celular</h2>
+        <p class="muted" style="margin-top:0">Aponte a câmera do celular para o QR code, aceite o aviso de certificado (uma vez só) e toque em iniciar.</p>
+        <div id="qrArea" class="qr-area"></div>
+      </div>
+      <div class="card">
+        <h2>Fontes no OBS</h2>
+        <p class="muted" style="margin-top:0">O botão abaixo cria no OBS uma cena por celular e a cena "Overlay" com as legendas, já ligada em todas as cenas.</p>
+        <button id="btnSetupObs" class="primary">🪄 Configurar OBS automaticamente</button>
+        <pre id="setupLog" class="log"></pre>
+        <details><summary class="muted">Endereços para adicionar manualmente</summary><div id="sourceUrls" class="urls"></div></details>
+      </div>
+    </div>
+
+    <!-- Áudio -->
+    <div class="tab" id="tab-audio">
+      <div class="card">
+        <div class="row between"><h2 style="margin:0">Mixer</h2><button id="btnAudioRefresh" class="ghost small">↻ Atualizar</button></div>
+        <div id="audioList" class="audio"></div>
+      </div>
+    </div>
+
+    <!-- Config -->
+    <div class="tab" id="tab-config">
+      <div class="card">
+        <h2>Conexão com o OBS</h2>
+        <div id="obsLocal" class="obs-local">
+          <div id="obsLocalMsg" class="muted">Verificando o OBS neste computador…</div>
+          <div class="row" style="margin-top:8px;gap:8px;flex-wrap:wrap">
+            <button id="obsLaunch" class="primary small" hidden>Abrir OBS</button>
+            <button id="obsEnableWs" class="small" hidden>Habilitar WebSocket do OBS</button>
+          </div>
+        </div>
+        <details style="margin:10px 0">
+          <summary class="muted">Configurar manualmente</summary>
+          <p class="muted">No OBS: Ferramentas → Configurações do servidor WebSocket → marque "Habilitar servidor WebSocket" e copie a senha. Deixe a senha em branco para usar a que o OBS já gerou.</p>
+        <div class="grid2">
+          <div class="field"><label>Endereço</label><input id="cfgHost" value="127.0.0.1"></div>
+          <div class="field"><label>Porta</label><input id="cfgPort" type="number" value="4455"></div>
+        </div>
+        <div class="field"><label>Senha <span id="cfgPwdHint" class="muted"></span></label><input id="cfgPassword" type="password" placeholder="deixe em branco para manter"></div>
+        <button id="cfgSaveObs" class="primary">Salvar e reconectar</button>
+        <span id="cfgObsMsg" class="muted"></span>
+        </details>
+      </div>
+      <div class="card">
+        <h2>Nomes das câmeras</h2>
+        <p class="muted" style="margin-top:0">Um por linha. São os nomes que aparecem para escolher no celular.</p>
+        <textarea id="cfgCams"></textarea>
+        <button id="cfgSaveCams" class="primary" style="margin-top:8px">Salvar nomes</button>
+      </div>
+      <div class="card">
+        <h2>Rede</h2>
+        <div id="netInfo" class="muted"></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div id="toast"></div>
+
+<script src="/common.js"></script>
+<script src="/mesa.js"></script>
+</body>
+</html>

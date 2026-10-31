@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0f1115">
+<title>Câmera</title>
+<link rel="stylesheet" href="/common.css">
+<style>
+  body { overflow: hidden; height: 100vh; height: 100dvh; }
+  #setup { max-width: 460px; margin: 0 auto; padding: 24px 18px calc(24px + env(safe-area-inset-bottom)); height: 100%; overflow-y: auto; }
+  #setup h1 { display: flex; align-items: center; gap: 10px; }
+  #setup .logo { width: 34px; height: 34px; border-radius: 9px; background: var(--accent); display: grid; place-items: center; font-size: 18px; }
+  #insecure { display: none; background: rgba(231,76,60,.15); border: 1px solid var(--danger); border-radius: var(--radius); padding: 12px; margin-bottom: 16px; font-size: 14px; }
+  #setup .big { width: 100%; font-size: 18px; padding: 16px; margin-top: 8px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  #live { display: none; position: fixed; inset: 0; background: #000; }
+  #live.on { display: block; }
+  #preview { width: 100%; height: 100%; object-fit: contain; background: #000; }
+  #live.tally::after { content: ""; position: absolute; inset: 0; border: 8px solid var(--live); pointer-events: none; }
+  .bar { position: absolute; left: 0; right: 0; display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: linear-gradient(to bottom, rgba(0,0,0,.65), rgba(0,0,0,0)); font-size: 14px; }
+  .bar.top { top: 0; padding-top: calc(10px + env(safe-area-inset-top)); }
+  .bar.bottom { bottom: 0; top: auto; padding-bottom: calc(10px + env(safe-area-inset-bottom)); background: linear-gradient(to top, rgba(0,0,0,.75), rgba(0,0,0,0)); flex-direction: column; align-items: stretch; gap: 8px; }
+  .bar .name { font-weight: 700; font-size: 16px; }
+  .bar .spacer { flex: 1; }
+  #onair { display: none; background: var(--live); color: #fff; font-weight: 800; padding: 4px 10px; border-radius: 6px; letter-spacing: .05em; }
+  #live.tally #onair { display: inline-block; }
+  .ctrls { display: flex; gap: 8px; justify-content: space-between; }
+  .ctrls button { flex: 1; padding: 10px 6px; font-size: 13px; background: rgba(31,35,48,.85); backdrop-filter: blur(6px); }
+  .ctrls button.active { border-color: var(--accent); color: var(--accent); }
+  .slider { display: none; align-items: center; gap: 10px; background: rgba(31,35,48,.85); border-radius: 10px; padding: 6px 12px; }
+  .slider.show { display: flex; }
+  .slider input { min-height: 0; padding: 0; background: none; border: 0; }
+  .slider span { min-width: 56px; font-size: 13px; color: var(--muted); }
+  #msg { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); background: rgba(0,0,0,.75); padding: 16px 22px; border-radius: 12px; font-size: 16px; display: none; text-align: center; max-width: 85%; }
+  #msg.show { display: block; }
+  .stat { color: #cdd3e0; }
+  .stat b { color: #fff; }
+</style>
+</head>
+<body>
+
+<section id="setup">
+  <h1><span class="logo">📷</span> Câmera do culto</h1>
+  <div id="insecure">
+    Esta página precisa ser aberta pelo endereço <b>https://</b> (com s) para a câmera funcionar.
+    Use o QR code da página inicial do servidor.
+  </div>
+  <p class="muted" style="margin-top:0">Escolha o nome da câmera, confira a qualidade e toque em iniciar. Depois é só deixar o celular no tripé.</p>
+
+  <div class="field">
+    <label>Nome desta câmera</label>
+    <select id="camName"></select>
+    <input id="camNameCustom" placeholder="Nome personalizado" style="display:none;margin-top:8px">
+  </div>
+  <div class="field">
+    <label>Câmera</label>
+    <select id="device"><option value="environment">Traseira (padrão)</option><option value="user">Frontal</option></select>
+  </div>
+  <div class="grid2">
+    <div class="field">
+      <label>Qualidade</label>
+      <select id="quality">
+        <option value="720">HD 720p (recomendado)</option>
+        <option value="1080">Full HD 1080p</option>
+        <option value="540">540p (rede fraca)</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Quadros/seg</label>
+      <select id="fps"><option value="30">30</option><option value="60">60</option><option value="25">25</option></select>
+    </div>
+  </div>
+  <div class="grid2">
+    <div class="field">
+      <label>Áudio do celular</label>
+      <select id="audio"><option value="0">Desligado</option><option value="1">Ligado (sem processamento)</option></select>
+    </div>
+    <div class="field">
+      <label>Codec</label>
+      <select id="codec"><option value="H264">H264 (menos bateria)</option><option value="VP8">VP8 (mais compatível)</option><option value="VP9">VP9</option></select>
+    </div>
+  </div>
+  <button id="start" class="primary big">▶ Iniciar câmera</button>
+  <p class="muted" style="font-size:13px">Dica: deixe o celular carregando e com o Wi‑Fi da igreja. A tela ficará ligada enquanto transmite.</p>
+</section>
+
+<section id="live">
+  <video id="preview" autoplay muted playsinline></video>
+  <div class="bar top">
+    <span class="dot" id="connDot"></span>
+    <span class="name" id="liveName"></span>
+    <span id="onair">NO AR</span>
+    <span class="spacer"></span>
+    <span class="stat" id="statViewers">OBS: <b>0</b></span>
+    <span class="stat" id="statBitrate"><b>–</b></span>
+    <span class="stat" id="statRes"><b>–</b></span>
+    <span class="stat" id="statBattery"></span>
+  </div>
+  <div id="msg"></div>
+  <div class="bar bottom">
+    <div class="slider" id="zoomRow"><span>Zoom</span><input type="range" id="zoom" min="1" max="1" step="0.1" value="1"><span id="zoomVal">1.0x</span></div>
+    <div class="slider" id="expRow"><span>Exposição</span><input type="range" id="exposure" min="0" max="0" step="1" value="0"><span id="expVal">0</span></div>
+    <div class="ctrls">
+      <button id="btnZoom">🔍 Zoom</button>
+      <button id="btnExp">☀️ Expos.</button>
+      <button id="btnTorch">🔦 Lanterna</button>
+      <button id="btnFlip">🔄 Trocar</button>
+      <button id="btnMute">🎤 Áudio</button>
+      <button id="btnStop" class="danger">■ Parar</button>
+    </div>
+  </div>
+</section>
+
+<script src="/common.js"></script>
+<script src="/cam.js"></script>
+</body>
+</html>

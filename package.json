@@ -1,0 +1,66 @@
+{
+  "name": "transmissao-igreja",
+  "version": "1.1.0",
+  "description": "Câmeras pelo celular via navegador + mesa de produção para OBS, num programa instalável",
+  "main": "app/main.js",
+  "scripts": {
+    "start": "node server.js",
+    "app": "electron .",
+    "icon": "node build/make-icon.js",
+    "dist": "node build/make-icon.js && electron-builder --win --publish never"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "electron-updater": "^6.8.11",
+    "qrcode": "^1.5.4",
+    "selfsigned": "^2.4.1",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "electron": "^45.2.1",
+    "electron-builder": "^26.18.0"
+  },
+  "author": "Equipe de transmissão",
+  "build": {
+    "appId": "br.igreja.transmissao",
+    "productName": "Transmissao Igreja",
+    "artifactName": "TransmissaoIgreja-Setup-${version}.${ext}",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "app/**",
+      "public/**",
+      "data/**",
+      "server.js",
+      "obs-local.js",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "runAfterFinish": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Transmissao Igreja",
+      "include": "build/installer.nsh",
+      "language": "1046"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "zenalvesf",
+      "repo": "transmissao-igreja"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zenalvesf/transmissao-igreja.git"
+  }
+}
