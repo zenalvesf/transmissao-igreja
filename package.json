@@ -37,6 +37,7 @@
       "data/**",
       "server.js",
       "obs-local.js",
+      "relay.js",
       "package.json"
     ],
     "win": {
