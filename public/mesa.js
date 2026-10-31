@@ -12,6 +12,7 @@
     tally: {}, // nome da câmera -> true/false
     relay: null, // estado do multidestino
     holyrics: null, // estado da conexão com o Holyrics
+    replay: null, // estado do replay instantâneo
   };
   const pending = new Map(); let reqId = 1;
 
@@ -54,9 +55,10 @@
       case 'presets': S.presets = m.presets; renderPresets(); break;
       case 'cams': S.cams = m.cams; renderCams(); updateTally(); break;
       case 'camStats': { const c = S.cams.find((x) => x.id === m.id); if (c) { c.meta = Object.assign({}, c.meta, m.stats); renderCams(); } break; }
-      case 'config': S.config = m.config; renderConfig(); renderDests(); renderHolyConfig(); break;
+      case 'config': S.config = m.config; renderConfig(); renderDests(); renderHolyConfig(); renderReplayConfig(); break;
       case 'relay': S.relay = m.state; renderRelay(); break;
       case 'holyrics': S.holyrics = m.state; renderHoly(); break;
+      case 'replay': S.replay = m.state; renderReplay(); break;
       default: break;
     }
   }
@@ -124,6 +126,7 @@
     if (e.key >= '1' && e.key <= '9' && visible[Number(e.key) - 1]) setScene(visible[Number(e.key) - 1]);
     if (e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); nextItem(1); }
     if (e.key === 'PageUp') { e.preventDefault(); nextItem(-1); }
+    if (e.key === 'r' || e.key === 'R') rpSalvar();
   });
 
   // Prévia do programa + estatísticas
@@ -441,6 +444,60 @@
     $('#cfgPwdHint').textContent = c.obs.hasPassword ? '(já salva)' : '(nenhuma)';
     $('#cfgCams').value = (c.cameraNames || []).join('\n');
   }
+  // ---- Replay instantâneo
+  let rpEditing = false;
+  async function rpPost(acao, body) {
+    const r = await (await fetch('/api/replay/' + acao, { method: 'POST', body: JSON.stringify(body || {}) })).json();
+    if (!r.ok) throw new Error(r.erro || 'falhou');
+    return r;
+  }
+  async function rpSalvar() {
+    if (!S.obs) return toast('OBS não conectado', true);
+    try { const r = await rpPost('salvar'); toast('Replay salvo: ' + r.salvo.nome); }
+    catch (e) { toast('Não salvou o replay: ' + e.message, true); }
+  }
+  async function rpExibir(arquivo) {
+    try { await rpPost('exibir', { arquivo, velocidade: Number($('#rpVel').value) }); }
+    catch (e) { toast('Não exibiu o replay: ' + e.message, true); }
+  }
+  function renderReplayConfig() {
+    const r = S.config && S.config.replay; if (!r) return;
+    $('#rpAuto').checked = !!r.auto; $('#rpSeg').textContent = r.segundos;
+    if (!rpEditing) { $('#rpVel').value = String(r.velocidade || 100); $('#rpDur').value = String(r.segundos || 30); }
+  }
+  function renderReplay() {
+    const st = S.replay || {}; const sb = $('#rpStatus');
+    sb.className = 'badge ' + (st.exibindo ? 'live' : st.bufferAtivo ? 'ok' : st.erro ? 'danger' : '');
+    sb.textContent = st.exibindo ? 'REPLAY NO AR' : st.bufferAtivo ? 'buffer ligado' : 'buffer desligado';
+    $('#rpVoltar').hidden = !st.exibindo;
+    $('#rpExibir').disabled = !(st.salvos && st.salvos.length);
+    const erroBox = $('#rpErro'); const naoAtivado = /não está ativado/.test(st.erro || '');
+    erroBox.hidden = !!st.bufferAtivo;
+    $('#rpErroMsg').textContent = st.erro || (S.obs ? 'O buffer de replay está desligado.' : 'Conecte o OBS para usar o replay.');
+    $('#rpAtivarObs').hidden = !naoAtivado;
+    $('#rpLigar').hidden = naoAtivado || !S.obs;
+    const box = $('#rpLista');
+    if (!st.salvos || !st.salvos.length) { box.innerHTML = '<p class="muted">Nenhum replay salvo ainda. Aperte <b>R</b> logo depois do momento que quer rever.</p>'; return; }
+    box.innerHTML = '';
+    st.salvos.forEach((s, i) => box.append(el('div', { class: 'rp-item' + (st.exibindo && st.arquivoExibido === s.arquivo ? ' onair' : '') }, [
+      el('span', { class: 'hora', text: s.hora }), el('span', { class: 'nome', text: (i === 0 ? 'último · ' : '') + s.nome, title: s.arquivo }),
+      el('button', { class: 'small primary', text: '▶ Exibir', onclick: () => rpExibir(s.arquivo) }),
+    ])));
+  }
+  $('#rpSalvar').addEventListener('click', rpSalvar);
+  $('#rpExibir').addEventListener('click', () => rpExibir());
+  $('#rpVoltar').addEventListener('click', () => rpPost('voltar').catch((e) => toast(e.message, true)));
+  $('#rpLigar').addEventListener('click', async () => { try { await rpPost('ligar'); toast('Buffer de replay ligado'); } catch (e) { toast(e.message, true); } });
+  $('#rpAtivarObs').addEventListener('click', async () => {
+    if (!confirm('O OBS precisa estar FECHADO para isso. Fechou o OBS?')) return;
+    try { const r = await rpPost('ativar-obs'); toast(r.launched ? 'Replay ativado; abrindo o OBS…' : 'Replay ativado no perfil do OBS. Abra o OBS.'); }
+    catch (e) { toast(e.message, true); }
+  });
+  for (const id of ['#rpVel', '#rpDur']) { $(id).addEventListener('focus', () => { rpEditing = true; }); $(id).addEventListener('blur', () => { rpEditing = false; }); }
+  $('#rpVel').addEventListener('change', () => fetch('/api/replay', { method: 'PUT', body: JSON.stringify({ velocidade: Number($('#rpVel').value) }) }));
+  $('#rpDur').addEventListener('change', () => { fetch('/api/replay', { method: 'PUT', body: JSON.stringify({ segundos: Number($('#rpDur').value) }) }); toast('A duração vale quando o replay for ativado no OBS (ou mude em Configurações → Saída do OBS).'); });
+  $('#rpAuto').addEventListener('change', () => fetch('/api/replay', { method: 'PUT', body: JSON.stringify({ auto: $('#rpAuto').checked }) }));
+
   // ---- Holyrics (letra do telão na live)
   const HLY_ESTADO = { desligado: ['', 'desligado'], conectando: ['warn', 'conectando…'], conectado: ['ok', 'conectado'], erro: ['danger', 'erro'] };
   let hlyEditing = false; // enquanto o operador digita, não sobrescreve os campos

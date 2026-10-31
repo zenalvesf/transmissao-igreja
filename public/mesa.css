@@ -139,3 +139,14 @@ select.small, button.small { min-height: 36px; padding: 6px 10px; width: auto; f
 .hly-preview.faixa > div { position: relative; padding: 8px 16px; }
 .hly-preview.caixa .x, .hly-preview.caixa .t { background: rgba(12,14,20,.82); padding: 8px 14px; border-radius: 8px; margin: 4px 0; }
 .hly-preview.sombra .x { text-shadow: 0 0 4px #000, 0 2px 12px #000; }
+
+/* ---- Replay ---- */
+.rp-lista { display: flex; flex-direction: column; gap: 6px; }
+.rp-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; }
+.rp-item.onair { border-color: var(--live); }
+.rp-item .hora { font-variant-numeric: tabular-nums; color: var(--muted); }
+.rp-item .nome { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.rp-item button { min-height: 32px; }
+button.primary .muted, button.ok .muted { color: rgba(255,255,255,.8); }
+#rpStatus.live { background: var(--live); border-color: var(--live); color: #fff; font-weight: 700; animation: pulse 1.6s infinite; }
+#top .actions a.btn { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; color: inherit; min-width: 0; padding: 0 14px; min-height: 48px; background: transparent; border: 1px solid var(--line); border-radius: var(--radius); }

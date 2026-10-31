@@ -59,7 +59,8 @@ Para publicar uma versão: aumente `version` em `package.json`, rode `npm run di
 3. **Destinos:** se usar YouTube + Instagram, confira na aba Destinos se os dois estão ligados e com a chave do dia (a do Instagram muda a cada live).
 4. **Holyrics:** na aba Holyrics, confira se está "conectado" e se **Mostrar a letra na live** está ligado. A letra do telão entra sozinha na transmissão.
 5. **Mesa:** abra http://localhost:8080/mesa no PC, ou `http://IP-DO-PC:8080/mesa` em um tablet.
-6. Siga o **Roteiro**: o botão **Próximo** troca a cena e dispara a legenda configurada em cada item. Teclas **1 a 9** trocam cenas, **Espaço** avança o roteiro.
+6. Siga o **Roteiro**: o botão **Próximo** troca a cena e dispara a legenda configurada em cada item. Teclas **1 a 9** trocam cenas, **Espaço** avança o roteiro, **R** salva um replay.
+7. **Multiview:** o botão no alto da mesa abre uma janela com o programa e todas as cenas ao vivo, para um segundo monitor ou TV. Clicar numa cena corta para ela.
 
 ### Tally (luz de "no ar")
 Quando a cena no ar contém a fonte de um celular, a tela desse celular ganha uma borda vermelha e o aviso **NO AR**. Isso usa o nome da câmera: a fonte no OBS precisa conter o nome (ex.: `Celular 1 (celular)`), que é como a configuração automática já cria.
@@ -103,6 +104,21 @@ O Holyrics roda em outro PC, só para o telão. O programa lê pela rede o slide
 - **Versículos:** a API do Holyrics não entrega o texto do versículo, só a referência. Para versículo na live, use o **Versículo** da aba Legendas (ou aponte uma câmera para o telão).
 - Os dois PCs precisam estar na mesma rede. O programa consulta o Holyrics várias vezes por segundo, mas só baixa dados quando o slide muda.
 
+## Replay instantâneo
+
+Serve para rever um momento (batismo, apresentação das crianças, testemunho) segundos depois de acontecer. Usa o **buffer de replay** do próprio OBS: ele guarda os últimos 30 segundos do programa na memória.
+
+- Aba **Replay** da mesa. Com o OBS conectado o buffer liga sozinho (dá para desligar isso).
+- **Salvar os últimos 30 s** (ou tecla **R** em qualquer aba) grava o trecho num arquivo, na pasta de gravação do OBS.
+- **Exibir o último replay** coloca o trecho no ar, na cena "Replay", e volta sozinho para a cena anterior quando termina. **Voltar para o programa** corta antes. Velocidade: normal, 75%, câmera lenta 50% ou 25%.
+- Os replays salvos no culto ficam listados para exibir de novo.
+
+**Se a mesa disser "O replay não está ativado nas configurações do OBS":** feche o OBS e clique em **Ativar o replay no OBS e abrir o OBS**. O programa liga o buffer no perfil do OBS (Configurações → Saída → Buffer de replay) com a duração escolhida e abre o OBS de novo. Para mudar a duração depois, troque na mesa e repita esse botão, ou mude direto no OBS.
+
+## Multiview
+
+`http://localhost:8080/multiview` mostra o programa em grande e todas as cenas em miniaturas ao vivo, com borda vermelha na que está no ar. Clique ou teclas **1 a 9** cortam. Abra em tela cheia (F11) num segundo monitor ou numa TV da sala técnica. As miniaturas vêm do próprio OBS; com muitas cenas num PC fraco, feche o multiview durante a transmissão.
+
 ## Pastas e arquivos
 
 ```
@@ -114,6 +130,7 @@ transmissao-igreja/
   obs-local.js     acha o OBS instalado, lê a senha do WebSocket, abre o OBS
   relay.js         multidestino: recebe do OBS (RTMP) e reenvia para YouTube/Instagram
   holyrics.js      lê pela API do Holyrics o slide em exibição e manda para o overlay
+  replay.js        replay instantâneo com o buffer de replay do OBS
   config.json      portas, senha do OBS, nomes das câmeras (gerado na primeira execução)
   data/            roteiro.json e presets.json de exemplo (o programa copia para %APPDATA%)
   certs/           certificado HTTPS gerado automaticamente (modo manual)
@@ -122,6 +139,7 @@ transmissao-igreja/
     view.html/js   fonte de navegador do OBS (uma por celular)
     overlay.html   legendas, versículo, aviso, título, contagem e letra do Holyrics
     mesa.html/js   mesa de produção
+    multiview.html programa + todas as cenas ao vivo (segundo monitor)
 ```
 
 ## Páginas e opções
@@ -133,10 +151,12 @@ transmissao-igreja/
 | `https://IP:8443/cam` | celular como câmera (tem que ser https) |
 | `http://localhost:8080/view/NOME` | fonte do OBS. Opções: `?fit=contain` (sem cortar), `?audio=1` (com áudio do celular), `?nosignal=black` (tela preta quando cai; o padrão congela o último quadro), `?debug=1` (mostra estatísticas) |
 | `http://localhost:8080/overlay` | overlay de legendas. Opções: `?accent=ff9900` (cor da igreja), `?font=Georgia` |
+| `http://localhost:8080/multiview` | multiview: programa + cenas ao vivo, clique para cortar |
 
 ## Problemas comuns
 
 - **O celular diz que precisa de https.** Use o QR code, que já aponta para o endereço https. Se o IP do PC mudou, feche e abra o `iniciar.bat` de novo e apague a pasta `certs` para gerar um certificado com o IP novo.
+- **"Salvar replay" falha.** O buffer precisa estar ligado (selo verde "buffer ligado" na aba Replay). Se o OBS não tem o buffer de replay ativado nas configurações, use o botão **Ativar o replay no OBS** com o OBS fechado.
 - **O Holyrics fica em "erro" na mesa.** A mensagem ao lado diz o motivo: "não aceitou a conexão" é API Server desligado ou IP errado; "token inválido" é token digitado errado ou sem a permissão GetCurrentPresentation; "tempo esgotado" costuma ser firewall no PC do Holyrics ou os PCs em redes diferentes.
 - **O OBS fica vermelho na mesa.** Na aba Config veja o que ela diz sobre o OBS: se estiver fechado, use **Abrir OBS**; se o WebSocket estiver desligado, **Habilitar WebSocket do OBS** e reabra o OBS. Se mudou a senha no OBS, salve-a em "Configurar manualmente".
 - **O Windows perguntou sobre o firewall.** Permita em redes **privadas**; sem isso os celulares não alcançam o PC.

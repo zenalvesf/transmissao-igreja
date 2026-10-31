@@ -1,6 +1,6 @@
 {
   "name": "transmissao-igreja",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Câmeras pelo celular via navegador + mesa de produção para OBS, num programa instalável",
   "main": "app/main.js",
   "scripts": {
@@ -39,6 +39,7 @@
       "obs-local.js",
       "relay.js",
       "holyrics.js",
+      "replay.js",
       "package.json"
     ],
     "win": {

@@ -55,6 +55,7 @@ const DEFAULT_CONFIG = {
     naLive: true, // a letra que o Holyrics exibe entra na live automaticamente
     estilo: { posicao: 'inferior', tamanho: 'M', fundo: 'faixa', maiusculas: false, titulo: false },
   },
+  replay: { auto: true, segundos: 30, velocidade: 100, cena: 'Replay', fonte: 'Replay (vídeo)' },
 };
 
 function readJson(file, fallback) {
@@ -70,6 +71,7 @@ config.obs = Object.assign({}, DEFAULT_CONFIG.obs, config.obs || {});
 config.relay = Object.assign({}, DEFAULT_CONFIG.relay, config.relay || {});
 config.holyrics = Object.assign({}, DEFAULT_CONFIG.holyrics, config.holyrics || {});
 config.holyrics.estilo = Object.assign({}, DEFAULT_CONFIG.holyrics.estilo, config.holyrics.estilo || {});
+config.replay = Object.assign({}, DEFAULT_CONFIG.replay, config.replay || {});
 if (!Array.isArray(config.relay.destinos)) config.relay.destinos = JSON.parse(JSON.stringify(DEFAULT_CONFIG.relay.destinos));
 if (!fs.existsSync(CONFIG_PATH)) writeJson(CONFIG_PATH, config);
 
@@ -143,7 +145,7 @@ function readBody(req) {
 }
 
 // ---------------------------------------------------------------- HTTP
-const PAGES = { '/': 'index.html', '/cam': 'cam.html', '/view': 'view.html', '/overlay': 'overlay.html', '/mesa': 'mesa.html' };
+const PAGES = { '/': 'index.html', '/cam': 'cam.html', '/view': 'view.html', '/overlay': 'overlay.html', '/mesa': 'mesa.html', '/multiview': 'multiview.html' };
 
 async function handleHttp(req, res) {
   const url = new URL(req.url, 'http://x');
@@ -250,6 +252,37 @@ async function handleApi(req, res, p) {
         const id = decodeURIComponent(m[2]);
         if (m[1] === 'restart') { relay.restartDest(id); return sendJson(res, { ok: true }); }
         return sendJson(res, { lines: relay.logOf(id) });
+      }
+    }
+    // Replay instantâneo (buffer de replay do OBS)
+    if (p === '/api/replay' && req.method === 'PUT') {
+      const body = await readBody(req);
+      const r = config.replay;
+      if (body.auto !== undefined) r.auto = !!body.auto;
+      if (body.segundos !== undefined) r.segundos = Math.min(300, Math.max(5, Number(body.segundos) || 30));
+      if (body.velocidade !== undefined) r.velocidade = Math.min(200, Math.max(25, Number(body.velocidade) || 100));
+      writeJson(CONFIG_PATH, config);
+      broadcast('mesa', { type: 'config', config: publicConfig() });
+      replay.emitState();
+      return sendJson(res, { config: publicConfig(), state: replay.state() });
+    }
+    if (p === '/api/replay') return sendJson(res, Object.assign(replay.state(), { obsLocal: obsLocal.readReplaySettings() }));
+    {
+      const m = p.match(/^\/api\/replay\/(ligar|desligar|salvar|exibir|voltar|ativar-obs)$/);
+      if (m && req.method === 'POST') {
+        const body = await readBody(req).catch(() => ({}));
+        try {
+          if (m[1] === 'ligar') { await replay.ligar(false); return sendJson(res, { ok: true }); }
+          if (m[1] === 'desligar') { await replay.desligar(); return sendJson(res, { ok: true }); }
+          if (m[1] === 'salvar') return sendJson(res, { ok: true, salvo: await replay.salvar() });
+          if (m[1] === 'exibir') { await replay.exibir(body.arquivo, body.velocidade); return sendJson(res, { ok: true }); }
+          if (m[1] === 'voltar') { await replay.voltar(); return sendJson(res, { ok: true }); }
+          // ativa o buffer no perfil do OBS (OBS fechado) e abre o OBS de novo
+          const r = obsLocal.enableReplayBuffer(config.replay.segundos);
+          let launched = null; try { launched = obsLocal.launchObs(); } catch { /* OBS não encontrado: só configurou */ }
+          for (const t of [5000, 10000, 20000]) setTimeout(() => { if (!obs.connected) obs.reconnect(); }, t);
+          return sendJson(res, { ok: true, arquivo: r.file, segundos: r.segundos, launched: !!(launched && launched.started) });
+        } catch (e) { return sendJson(res, { ok: false, erro: String(e.message || e) }); }
       }
     }
     // Holyrics (letra do telão na live)
@@ -362,6 +395,7 @@ function onWsMessage(c, raw) {
         wsSend(c.ws, { type: 'obsStatus', connected: obs.connected, error: obs.lastError });
         wsSend(c.ws, { type: 'relay', state: relay.state() });
         wsSend(c.ws, { type: 'holyrics', state: holyrics.state() });
+        wsSend(c.ws, { type: 'replay', state: replay.state() });
       } else if (c.role === 'overlay') {
         wsSend(c.ws, { type: 'overlay', overlay });
       }
@@ -465,6 +499,7 @@ class ObsClient {
       for (const p of this.pending.values()) p.reject(new Error('OBS desconectou'));
       this.pending.clear();
       if (was) console.log('[obs] desconectado');
+      if (was && this.onDisconnected) this.onDisconnected();
       broadcast('mesa', { type: 'obsStatus', connected: false, error: this.lastError });
       this.timer = setTimeout(() => this.connect(), 3000);
     });
@@ -484,8 +519,10 @@ class ObsClient {
       this.connected = true; this.lastError = '';
       console.log('[obs] conectado');
       broadcast('mesa', { type: 'obsStatus', connected: true });
+      if (this.onConnected) this.onConnected();
     } else if (op === 5) { // Event
       broadcast('mesa', { type: 'obsEvent', event: d.eventType, data: d.eventData });
+      if (this.onEvent) this.onEvent(d.eventType, d.eventData || {});
     } else if (op === 7) { // RequestResponse
       const p = this.pending.get(d.requestId);
       if (!p) return;
@@ -529,6 +566,15 @@ holyrics.on('state', (state) => broadcast('mesa', { type: 'holyrics', state }));
 holyrics.on('texto', syncLyrics);
 holyrics.start();
 syncLyrics();
+
+// ---------------------------------------------------------------- Replay instantâneo
+const { Replay } = require('./replay');
+const replay = new Replay(obs, () => config.replay);
+replay.on('state', (state) => broadcast('mesa', { type: 'replay', state }));
+obs.onConnected = () => replay.onConnected().catch((e) => console.warn('[replay]', e.message));
+obs.onDisconnected = () => replay.onDisconnected();
+obs.onEvent = (tipo, d) => replay.onEvent(tipo, d);
+if (obs.connected) obs.onConnected();
 
 // ---------------------------------------------------------------- start
 const httpServer = http.createServer(handleHttp);

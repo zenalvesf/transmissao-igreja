@@ -79,6 +79,71 @@ function launchObs() {
   return { started: true, exe };
 }
 
+// ---- Perfil do OBS (basic.ini): ativar o buffer de replay
+const OBS_DIR = path.join(process.env.APPDATA || '', 'obs-studio');
+
+/** Lê um .ini simples em { secoes: [{ nome, linhas }], eol, bom } preservando tudo o que não for alterado. */
+function parseIni(text) {
+  const bom = text.charCodeAt(0) === 0xFEFF; if (bom) text = text.slice(1);
+  const eol = text.includes('\r\n') ? '\r\n' : '\n';
+  const secoes = [{ nome: '', linhas: [] }];
+  for (const l of text.split(/\r?\n/)) {
+    const m = l.match(/^\s*\[([^\]]+)\]\s*$/);
+    if (m) secoes.push({ nome: m[1], linhas: [] }); else secoes[secoes.length - 1].linhas.push(l);
+  }
+  return { secoes, eol, bom };
+}
+function iniGet(ini, secao, chave) {
+  const sec = ini.secoes.find((x) => x.nome === secao); if (!sec) return undefined;
+  for (const l of sec.linhas) { const m = l.match(/^\s*([^=;#]+?)\s*=(.*)$/); if (m && m[1] === chave) return m[2].trim(); }
+  return undefined;
+}
+function iniSet(ini, secao, chave, valor) {
+  let sec = ini.secoes.find((x) => x.nome === secao);
+  if (!sec) { sec = { nome: secao, linhas: [] }; ini.secoes.push(sec); }
+  const i = sec.linhas.findIndex((l) => { const m = l.match(/^\s*([^=;#]+?)\s*=/); return m && m[1] === chave; });
+  if (i >= 0) sec.linhas[i] = chave + '=' + valor;
+  else { let j = sec.linhas.length; while (j > 0 && sec.linhas[j - 1].trim() === '') j--; sec.linhas.splice(j, 0, chave + '=' + valor); }
+}
+function iniToString(ini) {
+  const out = [];
+  for (const sec of ini.secoes) { if (sec.nome) out.push('[' + sec.nome + ']'); out.push(...sec.linhas); }
+  return (ini.bom ? '\uFEFF' : '') + out.join(ini.eol);
+}
+
+/** Pasta do perfil em uso (OBS 31 guarda a escolha em user.ini; versões antigas em global.ini). */
+function profileDir() {
+  let dir = 'Untitled';
+  for (const f of ['user.ini', 'global.ini']) {
+    try { const v = iniGet(parseIni(fs.readFileSync(path.join(OBS_DIR, f), 'utf8')), 'Basic', 'ProfileDir'); if (v) { dir = v; break; } } catch { /* sem arquivo */ }
+  }
+  return path.join(OBS_DIR, 'basic', 'profiles', dir);
+}
+
+/** Estado do buffer de replay no perfil do OBS: { configurado, ativado, segundos, modo } ou null. */
+function readReplaySettings() {
+  const file = path.join(profileDir(), 'basic.ini');
+  let ini; try { ini = parseIni(fs.readFileSync(file, 'utf8')); } catch { return null; }
+  const modo = (iniGet(ini, 'Output', 'Mode') || 'Simple');
+  const sec = /advanced/i.test(modo) ? 'AdvOut' : 'SimpleOutput';
+  return { file, modo: sec, ativado: /^true$/i.test(iniGet(ini, sec, 'RecRB') || ''), segundos: Number(iniGet(ini, sec, 'RecRBTime')) || 0 };
+}
+
+/** Liga o buffer de replay no perfil do OBS (com N segundos). Só faz efeito com o OBS fechado, pois ele regrava o basic.ini ao sair. */
+function enableReplayBuffer(segundos) {
+  if (isObsRunning()) throw new Error('Feche o OBS primeiro: ele regrava as configurações ao fechar.');
+  const file = path.join(profileDir(), 'basic.ini');
+  let ini; try { ini = parseIni(fs.readFileSync(file, 'utf8')); } catch { ini = parseIni(''); }
+  const sec = /advanced/i.test(iniGet(ini, 'Output', 'Mode') || 'Simple') ? 'AdvOut' : 'SimpleOutput';
+  const seg = Math.min(300, Math.max(5, Number(segundos) || 30));
+  iniSet(ini, sec, 'RecRB', 'true');
+  iniSet(ini, sec, 'RecRBTime', String(seg));
+  if (!iniGet(ini, sec, 'RecRBSize')) iniSet(ini, sec, 'RecRBSize', '512');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, iniToString(ini));
+  return { file, segundos: seg, modo: sec };
+}
+
 function status() {
   const exe = findObsExe();
   const ws = readWebsocketConfig();
@@ -90,4 +155,4 @@ function status() {
   };
 }
 
-module.exports = { readWebsocketConfig, detectedPassword, ensureWebsocketEnabled, findObsExe, isObsRunning, launchObs, status, WS_CONFIG };
+module.exports = { readWebsocketConfig, detectedPassword, ensureWebsocketEnabled, findObsExe, isObsRunning, launchObs, status, WS_CONFIG, readReplaySettings, enableReplayBuffer, parseIni, iniGet, iniSet, iniToString };
