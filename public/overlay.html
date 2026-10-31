@@ -54,6 +54,23 @@
   #title .text { font-size: 110px; font-weight: 800; line-height: 1.05; text-shadow: 0 8px 50px rgba(0,0,0,.7); }
   #title .line { width: 240px; height: 8px; background: var(--accent); margin: 28px auto 0; border-radius: 4px; }
 
+  /* ---- Letra do Holyrics ---- */
+  #lyrics { position: absolute; left: 0; right: 0; bottom: 90px; display: flex; justify-content: center; opacity: 0; transform: translateY(30px); transition: opacity .35s, transform .4s cubic-bezier(.2,.8,.2,1); }
+  #lyrics.superior { bottom: auto; top: 70px; transform: translateY(-30px); }
+  #lyrics.show { opacity: 1; transform: none; }
+  #lyrics.inferior.with-lower { bottom: 260px; }
+  #lyrics .box { max-width: 1500px; text-align: center; padding: 20px 48px; border-radius: 16px; }
+  #lyrics .title { font-size: 26px; font-weight: 700; color: var(--accent); letter-spacing: .02em; margin-bottom: 8px; }
+  #lyrics .title:empty { display: none; }
+  #lyrics .text { font-size: 48px; font-weight: 600; line-height: 1.25; white-space: pre-line; text-shadow: 0 3px 16px rgba(0,0,0,.7); }
+  #lyrics.P .text { font-size: 38px; } #lyrics.G .text { font-size: 60px; }
+  #lyrics.long .text { font-size: 38px; } #lyrics.long.G .text { font-size: 46px; } #lyrics.long.P .text { font-size: 32px; }
+  #lyrics.maiusculas .text { text-transform: uppercase; }
+  #lyrics.faixa .box { width: 100%; max-width: none; border-radius: 0; background: var(--card); backdrop-filter: blur(8px); border-top: 4px solid var(--accent); }
+  #lyrics.superior.faixa .box { border-top: 0; border-bottom: 4px solid var(--accent); }
+  #lyrics.caixa .box { background: var(--card); backdrop-filter: blur(8px); border-left: 10px solid var(--accent); }
+  #lyrics.sombra .text { text-shadow: 0 0 6px #000, 0 4px 24px rgba(0,0,0,.95); }
+
   body.scaled .layer { transform-origin: 0 0; }
 </style>
 </head>
@@ -64,6 +81,7 @@
   <div id="ticker"><div class="label">AVISO</div><div class="track"><span class="text"></span></div></div>
   <div id="countdown"><div class="inner"><div class="time">00:00</div><div class="msg"></div></div></div>
   <div id="title"><div class="text"></div><div class="line"></div></div>
+  <div id="lyrics" class="inferior faixa M"><div class="box"><div class="title"></div><div class="text"></div></div></div>
 </div>
 <script src="/common.js"></script>
 <script>
@@ -84,7 +102,7 @@
   }
   fitScale(); window.addEventListener('resize', fitScale);
 
-  const lower = $('#lower'), verse = $('#verse'), ticker = $('#ticker'), countdown = $('#countdown'), title = $('#title');
+  const lower = $('#lower'), verse = $('#verse'), ticker = $('#ticker'), countdown = $('#countdown'), title = $('#title'), lyrics = $('#lyrics');
   let cd = { visible: false, target: 0, message: '' };
 
   function apply(o) {
@@ -110,6 +128,14 @@
     }
     if (o.countdown) { cd = o.countdown; $('.msg', countdown).textContent = cd.message || ''; countdown.classList.toggle('show', !!cd.visible); tick(); }
     if (o.title) { const t = o.title; if (t.visible) $('.text', title).textContent = t.text || ''; title.classList.toggle('show', !!t.visible); }
+    if (o.lyrics) {
+      const l = o.lyrics, e = l.estilo || {};
+      if (l.visible) { $('.text', lyrics).textContent = l.text || ''; $('.title', lyrics).textContent = e.titulo ? (l.title || '') : ''; }
+      lyrics.className = [e.posicao === 'superior' ? 'superior' : 'inferior', e.fundo || 'faixa', e.tamanho || 'M',
+        e.maiusculas ? 'maiusculas' : '', (l.text || '').length > 150 ? 'long' : '', l.visible ? 'show' : ''].filter(Boolean).join(' ');
+    }
+    // letra inferior sobe quando a legenda inferior está na tela, para não se sobreporem
+    lyrics.classList.toggle('with-lower', lower.classList.contains('show'));
   }
 
   function tick() {

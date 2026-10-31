@@ -57,8 +57,9 @@ Para publicar uma versão: aumente `version` em `package.json`, rode `npm run di
 1. Abra o **Transmissao Igreja** (atalho na área de trabalho) ou, no modo manual, o `iniciar.bat`. Abra o OBS pela aba Config, se ainda não estiver aberto.
 2. **Celulares:** leia o QR code da página inicial (ou da aba Câmeras da mesa). O navegador vai avisar que o certificado não é confiável: toque em **Avançado → Continuar** (no iPhone: **Mostrar detalhes → Visitar este site**). Isso acontece só na primeira vez em cada aparelho. Escolha o nome da câmera, confira a qualidade e toque em **Iniciar câmera**. Deixe o celular no tripé carregando; a tela fica ligada sozinha.
 3. **Destinos:** se usar YouTube + Instagram, confira na aba Destinos se os dois estão ligados e com a chave do dia (a do Instagram muda a cada live).
-4. **Mesa:** abra http://localhost:8080/mesa no PC, ou `http://IP-DO-PC:8080/mesa` em um tablet.
-5. Siga o **Roteiro**: o botão **Próximo** troca a cena e dispara a legenda configurada em cada item. Teclas **1 a 9** trocam cenas, **Espaço** avança o roteiro.
+4. **Holyrics:** na aba Holyrics, confira se está "conectado" e se **Mostrar a letra na live** está ligado. A letra do telão entra sozinha na transmissão.
+5. **Mesa:** abra http://localhost:8080/mesa no PC, ou `http://IP-DO-PC:8080/mesa` em um tablet.
+6. Siga o **Roteiro**: o botão **Próximo** troca a cena e dispara a legenda configurada em cada item. Teclas **1 a 9** trocam cenas, **Espaço** avança o roteiro.
 
 ### Tally (luz de "no ar")
 Quando a cena no ar contém a fonte de um celular, a tela desse celular ganha uma borda vermelha e o aviso **NO AR**. Isso usa o nome da câmera: a fonte no OBS precisa conter o nome (ex.: `Celular 1 (celular)`), que é como a configuração automática já cria.
@@ -85,9 +86,22 @@ Dá para adicionar outros destinos (Facebook, site da igreja etc.) com **+ Adici
 
 **Como funciona por dentro:** servidor RTMP local (node-media-server) na porta 1935 + um processo ffmpeg por destino, com reinício automático e espera crescente (3 s, 6 s… até 30 s) quando cai. O ffmpeg vem dentro do instalador.
 
-## Holyrics
+## Letra do Holyrics na live
 
-O Holyrics roda em outro PC só para o telão. Para a transmissão, o mais simples é apontar uma das webcams para o telão ou usar o **versículo** e o **título** da mesa, que ficam bem na tela do YouTube. Se quiserem que a letra do Holyrics apareça na live, o caminho é a saída NDI do Holyrics com o plugin **obs-ndi** no OBS; posso integrar isso depois.
+O Holyrics roda em outro PC, só para o telão. O programa lê pela rede o slide que o Holyrics está mostrando e coloca o texto na transmissão, por cima da imagem, com o mesmo visual das outras legendas (faixa escura, caixa ou só texto com sombra). Não precisa de NDI nem de plugin no OBS.
+
+**No PC do Holyrics (uma vez só):**
+
+1. **Menu arquivo → Configurações → API Server.** Ative para a **rede local**. Anote o IP e a porta (normalmente 8091).
+2. Em **gerenciar permissões**, crie um token e marque a permissão **GetCurrentPresentation** (é a única que o programa usa). Copie o token.
+3. Se o Windows do PC do Holyrics perguntar sobre firewall, permita na rede privada.
+
+**No PC da transmissão:** aba **Holyrics** da mesa → IP, porta e token → **Testar conexão** → **Salvar e conectar**. Pronto: quando o Holyrics mostra uma música ou texto, a letra aparece na live; tela preta, papel de parede ou nada em exibição tiram a letra da live.
+
+- **Mostrar a letra na live** liga e desliga a letra sem desconectar. Também dá para colocar no roteiro ("Letra do Holyrics: mostrar/ocultar"), por exemplo ligar no Louvor e desligar na Pregação.
+- **Aparência:** embaixo ou em cima, três tamanhos, faixa de ponta a ponta / caixa / só sombra, maiúsculas e nome da música. Quando a legenda inferior (nome do pregador) está na tela, a letra sobe um pouco para não cobrir.
+- **Versículos:** a API do Holyrics não entrega o texto do versículo, só a referência. Para versículo na live, use o **Versículo** da aba Legendas (ou aponte uma câmera para o telão).
+- Os dois PCs precisam estar na mesma rede. O programa consulta o Holyrics várias vezes por segundo, mas só baixa dados quando o slide muda.
 
 ## Pastas e arquivos
 
@@ -99,13 +113,14 @@ transmissao-igreja/
   server.js        servidor: páginas, sinalização WebRTC, conexão com o OBS
   obs-local.js     acha o OBS instalado, lê a senha do WebSocket, abre o OBS
   relay.js         multidestino: recebe do OBS (RTMP) e reenvia para YouTube/Instagram
+  holyrics.js      lê pela API do Holyrics o slide em exibição e manda para o overlay
   config.json      portas, senha do OBS, nomes das câmeras (gerado na primeira execução)
   data/            roteiro.json e presets.json de exemplo (o programa copia para %APPDATA%)
   certs/           certificado HTTPS gerado automaticamente (modo manual)
   public/
     cam.html/js    página do celular
     view.html/js   fonte de navegador do OBS (uma por celular)
-    overlay.html   legendas, versículo, aviso, título e contagem
+    overlay.html   legendas, versículo, aviso, título, contagem e letra do Holyrics
     mesa.html/js   mesa de produção
 ```
 
@@ -122,6 +137,7 @@ transmissao-igreja/
 ## Problemas comuns
 
 - **O celular diz que precisa de https.** Use o QR code, que já aponta para o endereço https. Se o IP do PC mudou, feche e abra o `iniciar.bat` de novo e apague a pasta `certs` para gerar um certificado com o IP novo.
+- **O Holyrics fica em "erro" na mesa.** A mensagem ao lado diz o motivo: "não aceitou a conexão" é API Server desligado ou IP errado; "token inválido" é token digitado errado ou sem a permissão GetCurrentPresentation; "tempo esgotado" costuma ser firewall no PC do Holyrics ou os PCs em redes diferentes.
 - **O OBS fica vermelho na mesa.** Na aba Config veja o que ela diz sobre o OBS: se estiver fechado, use **Abrir OBS**; se o WebSocket estiver desligado, **Habilitar WebSocket do OBS** e reabra o OBS. Se mudou a senha no OBS, salve-a em "Configurar manualmente".
 - **O Windows perguntou sobre o firewall.** Permita em redes **privadas**; sem isso os celulares não alcançam o PC.
 - **A imagem no OBS congela.** Na aba Câmeras clique em **Reiniciar vídeo** no celular correspondente. Se cair muito, aproxime o roteador ou use 540p.

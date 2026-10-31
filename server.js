@@ -50,6 +50,11 @@ const DEFAULT_CONFIG = {
       { id: 'instagram', nome: 'Instagram', ativo: false, url: '', key: '', modo: 'vertical', cropX: 0.5, res: 720, bitrate: 2500 },
     ],
   },
+  holyrics: {
+    host: '', port: 8091, token: '', ativo: false, intervalo: 400,
+    naLive: true, // a letra que o Holyrics exibe entra na live automaticamente
+    estilo: { posicao: 'inferior', tamanho: 'M', fundo: 'faixa', maiusculas: false, titulo: false },
+  },
 };
 
 function readJson(file, fallback) {
@@ -63,6 +68,8 @@ function writeJson(file, obj) {
 let config = Object.assign({}, DEFAULT_CONFIG, readJson(CONFIG_PATH, {}));
 config.obs = Object.assign({}, DEFAULT_CONFIG.obs, config.obs || {});
 config.relay = Object.assign({}, DEFAULT_CONFIG.relay, config.relay || {});
+config.holyrics = Object.assign({}, DEFAULT_CONFIG.holyrics, config.holyrics || {});
+config.holyrics.estilo = Object.assign({}, DEFAULT_CONFIG.holyrics.estilo, config.holyrics.estilo || {});
 if (!Array.isArray(config.relay.destinos)) config.relay.destinos = JSON.parse(JSON.stringify(DEFAULT_CONFIG.relay.destinos));
 if (!fs.existsSync(CONFIG_PATH)) writeJson(CONFIG_PATH, config);
 
@@ -76,6 +83,7 @@ let overlay = {
   ticker: { visible: false, text: '' },
   countdown: { visible: false, target: 0, message: '' },
   title: { visible: false, text: '' },
+  lyrics: { visible: false, text: '', title: '', kind: '', estilo: {} }, // letra vinda do Holyrics
 };
 
 // ---------------------------------------------------------------- utilidades
@@ -164,6 +172,7 @@ function publicConfig() {
   safe.obs.hasPassword = !!safe.obs.password;
   delete safe.obs.password;
   for (const d of safe.relay.destinos) { d.hasKey = !!d.key; d.keyHint = d.key ? '••••' + d.key.slice(-4) : ''; delete d.key; }
+  safe.holyrics.hasToken = !!safe.holyrics.token; delete safe.holyrics.token;
   return safe;
 }
 
@@ -243,6 +252,39 @@ async function handleApi(req, res, p) {
         return sendJson(res, { lines: relay.logOf(id) });
       }
     }
+    // Holyrics (letra do telão na live)
+    if (p === '/api/holyrics' && req.method === 'PUT') {
+      const body = await readBody(req);
+      const h = config.holyrics;
+      if (body.host !== undefined) h.host = String(body.host).trim();
+      if (body.port !== undefined) h.port = Number(body.port) || 8091;
+      if (typeof body.token === 'string' && body.token.trim()) h.token = body.token.trim(); // em branco = manter
+      if (body.limparToken) h.token = '';
+      if (body.ativo !== undefined) h.ativo = !!body.ativo;
+      if (body.naLive !== undefined) h.naLive = !!body.naLive;
+      if (body.intervalo !== undefined) h.intervalo = Math.max(200, Number(body.intervalo) || 400);
+      if (body.estilo && typeof body.estilo === 'object') {
+        const e = body.estilo;
+        h.estilo = {
+          posicao: e.posicao === 'superior' ? 'superior' : 'inferior',
+          tamanho: ['P', 'M', 'G'].includes(e.tamanho) ? e.tamanho : 'M',
+          fundo: ['faixa', 'caixa', 'sombra'].includes(e.fundo) ? e.fundo : 'faixa',
+          maiusculas: !!e.maiusculas, titulo: !!e.titulo,
+        };
+      }
+      writeJson(CONFIG_PATH, config);
+      holyrics.aplicarConfig();
+      syncLyrics();
+      broadcast('mesa', { type: 'config', config: publicConfig() });
+      return sendJson(res, { config: publicConfig(), state: holyrics.state() });
+    }
+    if (p === '/api/holyrics') return sendJson(res, holyrics.state());
+    if (p === '/api/holyrics/testar' && req.method === 'POST') {
+      const body = await readBody(req);
+      const token = (typeof body.token === 'string' && body.token.trim()) ? body.token.trim() : config.holyrics.token;
+      try { return sendJson(res, await Holyrics.testar({ host: String(body.host || config.holyrics.host).trim(), port: Number(body.port) || config.holyrics.port, token })); }
+      catch (e) { return sendJson(res, { ok: false, erro: String(e.message || e) }); }
+    }
     // OBS instalado neste computador
     if (p === '/api/obs/local') {
       return sendJson(res, Object.assign(obsLocal.status(), {
@@ -319,6 +361,7 @@ function onWsMessage(c, raw) {
         wsSend(c.ws, { type: 'config', config: publicConfig() });
         wsSend(c.ws, { type: 'obsStatus', connected: obs.connected, error: obs.lastError });
         wsSend(c.ws, { type: 'relay', state: relay.state() });
+        wsSend(c.ws, { type: 'holyrics', state: holyrics.state() });
       } else if (c.role === 'overlay') {
         wsSend(c.ws, { type: 'overlay', overlay });
       }
@@ -469,6 +512,23 @@ const { Relay } = require('./relay');
 const relay = new Relay(() => config.relay);
 relay.on('state', (state) => broadcast('mesa', { type: 'relay', state }));
 relay.start();
+
+// ---------------------------------------------------------------- Holyrics (letra do telão)
+const { Holyrics } = require('./holyrics');
+const holyrics = new Holyrics(() => config.holyrics);
+/** Copia o texto atual do Holyrics para a camada "lyrics" do overlay e avisa todo mundo. */
+function syncLyrics() {
+  const h = config.holyrics, s = holyrics.state();
+  const next = { visible: !!(h.ativo && h.naLive && s.texto), text: s.texto, title: s.titulo, kind: s.atual ? s.atual.type : '', estilo: Object.assign({}, h.estilo) };
+  if (JSON.stringify(next) === JSON.stringify(overlay.lyrics)) return;
+  overlay.lyrics = next;
+  broadcast('overlay', { type: 'overlay', overlay });
+  broadcast('mesa', { type: 'overlay', overlay });
+}
+holyrics.on('state', (state) => broadcast('mesa', { type: 'holyrics', state }));
+holyrics.on('texto', syncLyrics);
+holyrics.start();
+syncLyrics();
 
 // ---------------------------------------------------------------- start
 const httpServer = http.createServer(handleHttp);

@@ -11,6 +11,7 @@
     cams: [], config: null, info: null, editing: false, audioInputs: [],
     tally: {}, // nome da câmera -> true/false
     relay: null, // estado do multidestino
+    holyrics: null, // estado da conexão com o Holyrics
   };
   const pending = new Map(); let reqId = 1;
 
@@ -53,8 +54,9 @@
       case 'presets': S.presets = m.presets; renderPresets(); break;
       case 'cams': S.cams = m.cams; renderCams(); updateTally(); break;
       case 'camStats': { const c = S.cams.find((x) => x.id === m.id); if (c) { c.meta = Object.assign({}, c.meta, m.stats); renderCams(); } break; }
-      case 'config': S.config = m.config; renderConfig(); renderDests(); break;
+      case 'config': S.config = m.config; renderConfig(); renderDests(); renderHolyConfig(); break;
       case 'relay': S.relay = m.state; renderRelay(); break;
+      case 'holyrics': S.holyrics = m.state; renderHoly(); break;
       default: break;
     }
   }
@@ -205,6 +207,7 @@
     set('#tkState', o.ticker && o.ticker.visible, 'oculto');
     set('#ttState', o.title && o.title.visible, 'oculto');
     set('#cdState', o.countdown && o.countdown.visible, 'oculta');
+    set('#lyState', o.lyrics && o.lyrics.visible, 'oculta');
   }
   $('#ltShow').addEventListener('click', () => overlayPatch({ lowerThird: { visible: true, title: $('#ltTitle').value, subtitle: $('#ltSubtitle').value } }));
   $('#ltHide').addEventListener('click', () => overlayPatch({ lowerThird: { visible: false } }));
@@ -217,7 +220,10 @@
   $('#cdShow').addEventListener('click', () => overlayPatch({ countdown: { visible: true, target: countdownTarget(), message: $('#cdMsg').value } }));
   $('#cdHide').addEventListener('click', () => overlayPatch({ countdown: { visible: false } }));
   $('#clearAll').addEventListener('click', clearOverlay);
-  function clearOverlay() { overlayPatch({ lowerThird: { visible: false }, verse: { visible: false }, ticker: { visible: false }, title: { visible: false }, countdown: { visible: false } }); }
+  function clearOverlay() {
+    overlayPatch({ lowerThird: { visible: false }, verse: { visible: false }, ticker: { visible: false }, title: { visible: false }, countdown: { visible: false } });
+    if (S.config && S.config.holyrics && S.config.holyrics.naLive) hlySet({ naLive: false });
+  }
   function countdownTarget() {
     const t = $('#cdTime').value;
     if (t) { const [h, m] = t.split(':').map(Number); const d = new Date(); d.setHours(h, m, 0, 0); if (d < new Date()) d.setDate(d.getDate() + 1); return d.getTime(); }
@@ -269,7 +275,7 @@
   }
   function acaoLabel(a) {
     if (!a || a.tipo === 'none') return null;
-    const map = { clear: '🧹 limpar legendas', lower: '🔤 ' + (a.title || ''), verse: '📖 ' + (a.ref || ''), title: '🏷️ ' + (a.text || ''), ticker: '📣 aviso', countdown: '⏱ contagem ' + (a.minutes || 0) + ' min' };
+    const map = { clear: '🧹 limpar legendas', lower: '🔤 ' + (a.title || ''), verse: '📖 ' + (a.ref || ''), title: '🏷️ ' + (a.text || ''), ticker: '📣 aviso', countdown: '⏱ contagem ' + (a.minutes || 0) + ' min', letra: '🎵 letra do Holyrics', letraOff: '🎵 letra: ocultar' };
     return map[a.tipo] || a.tipo;
   }
   function move(i, d) { const it = S.roteiro.itens; const j = i + d; if (j < 0 || j >= it.length) return; [it[i], it[j]] = [it[j], it[i]]; if (S.roteiro.atual === i) S.roteiro.atual = j; else if (S.roteiro.atual === j) S.roteiro.atual = i; saveRoteiro(); }
@@ -288,6 +294,8 @@
     if (a.tipo === 'title') return overlayPatch({ title: { visible: true, text: a.text || '' } });
     if (a.tipo === 'ticker') return overlayPatch({ ticker: { visible: true, text: a.text || '' } });
     if (a.tipo === 'countdown') return overlayPatch({ countdown: { visible: true, target: Date.now() + Number(a.minutes || 0) * 60000, message: a.message || '' } });
+    if (a.tipo === 'letra') return hlySet({ naLive: true });
+    if (a.tipo === 'letraOff') return hlySet({ naLive: false });
   }
   $('#btnNext').addEventListener('click', () => nextItem(1));
   $('#btnPrev').addEventListener('click', () => nextItem(-1));
@@ -433,6 +441,72 @@
     $('#cfgPwdHint').textContent = c.obs.hasPassword ? '(já salva)' : '(nenhuma)';
     $('#cfgCams').value = (c.cameraNames || []).join('\n');
   }
+  // ---- Holyrics (letra do telão na live)
+  const HLY_ESTADO = { desligado: ['', 'desligado'], conectando: ['warn', 'conectando…'], conectado: ['ok', 'conectado'], erro: ['danger', 'erro'] };
+  let hlyEditing = false; // enquanto o operador digita, não sobrescreve os campos
+  async function hlySet(patch) {
+    try {
+      const r = await (await fetch('/api/holyrics', { method: 'PUT', body: JSON.stringify(patch) })).json();
+      if (r.config) { S.config = r.config; renderHolyConfig(); }
+      if (r.state) { S.holyrics = r.state; renderHoly(); }
+      return r;
+    } catch (e) { toast('Não consegui salvar: ' + e.message, true); }
+  }
+  function renderHolyConfig() {
+    const h = S.config && S.config.holyrics; if (!h) return;
+    if (!hlyEditing) { $('#hlyHost').value = h.host || ''; $('#hlyPort').value = h.port || 8091; }
+    $('#hlyTokenHint').textContent = h.hasToken ? '(já salvo)' : '(nenhum)';
+    $('#hlyAtivo').checked = !!h.ativo;
+    $('#hlyNaLive').checked = !!h.naLive;
+    const e = h.estilo || {};
+    $('#hlyPosicao').value = e.posicao || 'inferior'; $('#hlyTamanho').value = e.tamanho || 'M'; $('#hlyFundo').value = e.fundo || 'faixa';
+    $('#hlyMaiusculas').checked = !!e.maiusculas; $('#hlyTitulo').checked = !!e.titulo;
+    renderHolyPreview();
+    renderHoly();
+  }
+  function renderHolyPreview() {
+    const p = $('#hlyPreview');
+    p.className = ['hly-preview', $('#hlyPosicao').value, $('#hlyTamanho').value, $('#hlyFundo').value, $('#hlyMaiusculas').checked ? 'maiusculas' : ''].filter(Boolean).join(' ');
+    $('.t', p).textContent = $('#hlyTitulo').checked ? 'Grande é o Senhor' : '';
+  }
+  function renderHoly() {
+    const st = S.holyrics || { estado: 'desligado' }, h = (S.config && S.config.holyrics) || {};
+    const [cls, label] = HLY_ESTADO[st.estado] || ['', st.estado];
+    const sb = $('#hlyStatus'); sb.className = 'badge ' + cls; sb.textContent = label + (st.estado === 'erro' && st.erro ? ' · ' + st.erro : '');
+    const badge = $('#hlyBadge'); badge.hidden = !h.ativo;
+    if (h.ativo) setBadge(badge, st.estado === 'conectado' ? 'ok' : st.estado === 'erro' ? 'danger' : 'warn', 'Holyrics');
+    const box = $('#hlyAgora');
+    if (!h.ativo) box.innerHTML = '<span class="muted">Ligue a conexão com o Holyrics abaixo.</span>';
+    else if (st.estado !== 'conectado') box.innerHTML = '<span class="muted">' + (st.estado === 'erro' ? 'Sem conexão: ' + (st.erro || '') : 'Conectando ao Holyrics…') + '</span>';
+    else if (!st.atual) box.innerHTML = '<span class="muted">Nada em exibição no Holyrics.</span>';
+    else {
+      const tipo = { song: 'Música', text: 'Texto', verse: 'Versículo', image: 'Imagem', video: 'Vídeo', audio: 'Áudio', announcement: 'Anúncio', quick_presentation: 'Apresentação', automatic_presentation: 'Apresentação' }[st.atual.type] || st.atual.type;
+      box.innerHTML = '';
+      const nome = el('b', { text: st.atual.name || '' });
+      box.append(el('div', { class: 'h' }, [el('span', {}, [tipo + ': ', nome]), el('span', { text: st.atual.total ? 'slide ' + st.atual.slide + '/' + st.atual.total : '' })]));
+      const vazio = st.atual.type === 'verse' ? 'O Holyrics não envia o texto do versículo pela API; use o versículo da aba Legendas.' : 'Tela sem texto';
+      box.append(el('div', { class: 'txt' + (st.texto ? '' : ' muted'), text: st.texto || vazio }));
+    }
+  }
+  for (const id of ['#hlyHost', '#hlyPort', '#hlyToken']) { $(id).addEventListener('focus', () => { hlyEditing = true; }); $(id).addEventListener('blur', () => { hlyEditing = false; }); }
+  $('#hlySalvar').addEventListener('click', async () => {
+    const r = await hlySet({ host: $('#hlyHost').value, port: Number($('#hlyPort').value) || 8091, token: $('#hlyToken').value, ativo: $('#hlyAtivo').checked });
+    if (r) { $('#hlyToken').value = ''; toast('Holyrics salvo'); }
+  });
+  $('#hlyAtivo').addEventListener('change', () => hlySet({ ativo: $('#hlyAtivo').checked }));
+  $('#hlyTestar').addEventListener('click', async () => {
+    const msg = $('#hlyMsg'); msg.textContent = 'Testando…';
+    try {
+      const r = await (await fetch('/api/holyrics/testar', { method: 'POST', body: JSON.stringify({ host: $('#hlyHost').value, port: Number($('#hlyPort').value) || 8091, token: $('#hlyToken').value }) })).json();
+      msg.textContent = r.ok ? ('Conectou ✔' + (r.apresentando ? ' · exibindo: ' + (r.nome || 'item') : ' · nada em exibição agora')) : ('Falhou: ' + r.erro);
+    } catch (e) { msg.textContent = 'Falhou: ' + e.message; }
+  });
+  $('#hlyNaLive').addEventListener('change', () => hlySet({ naLive: $('#hlyNaLive').checked }));
+  for (const id of ['#hlyPosicao', '#hlyTamanho', '#hlyFundo', '#hlyMaiusculas', '#hlyTitulo']) $(id).addEventListener('change', () => {
+    renderHolyPreview();
+    hlySet({ estilo: { posicao: $('#hlyPosicao').value, tamanho: $('#hlyTamanho').value, fundo: $('#hlyFundo').value, maiusculas: $('#hlyMaiusculas').checked, titulo: $('#hlyTitulo').checked } });
+  });
+
   // ---- Multidestino (YouTube + Instagram)
   const EST_LABEL = { parado: 'parado', conectando: 'conectando…', 'no ar': 'NO AR', reiniciando: 'reconectando…', erro: 'erro' };
   let destDirty = false;

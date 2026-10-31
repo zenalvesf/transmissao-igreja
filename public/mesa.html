@@ -18,6 +18,7 @@
     <span class="badge" id="streamBadge">Fora do ar</span>
     <span class="muted" id="streamInfo"></span>
     <span id="destBadges"></span>
+    <span class="badge" id="hlyBadge" hidden><span class="dot"></span>Holyrics</span>
   </div>
   <div class="actions">
     <button id="btnRecord" title="Gravar localmente">⏺ Gravar</button>
@@ -57,6 +58,7 @@
       <button data-tab="cameras">📱 Câmeras</button>
       <button data-tab="audio">🎚️ Áudio</button>
       <button data-tab="destinos">📡 Destinos</button>
+      <button data-tab="holyrics">🎵 Holyrics</button>
       <button data-tab="config">⚙️ Config</button>
     </nav>
 
@@ -86,6 +88,8 @@
                 <option value="title">Mostrar título central</option>
                 <option value="ticker">Mostrar aviso rolante</option>
                 <option value="countdown">Contagem regressiva</option>
+                <option value="letra">Letra do Holyrics: mostrar</option>
+                <option value="letraOff">Letra do Holyrics: ocultar</option>
               </select>
             </div>
           </div>
@@ -202,6 +206,46 @@
           <select id="relayEncoder" class="small"><option value="auto">Automático</option></select>
         </label>
         <button id="destSave" class="primary">Salvar destinos</button>
+      </div>
+    </div>
+
+    <!-- Holyrics -->
+    <div class="tab" id="tab-holyrics">
+      <div class="card">
+        <div class="row between"><h2 style="margin:0">Letra do Holyrics na live</h2><span class="badge" id="lyState">oculta</span></div>
+        <p class="muted" style="margin-top:0">O que o Holyrics mostra no telão aparece na transmissão, por cima da imagem, com o visual da mesa.</p>
+        <label class="switch big"><input type="checkbox" id="hlyNaLive"> Mostrar a letra na live</label>
+        <div id="hlyAgora" class="hly-agora"><span class="muted">Nada em exibição no Holyrics.</span></div>
+      </div>
+
+      <div class="card">
+        <div class="row between"><h2 style="margin:0">Conexão com o Holyrics</h2><span class="badge" id="hlyStatus">desligado</span></div>
+        <p class="muted" style="margin-top:0">No computador do Holyrics: <b>Menu arquivo → Configurações → API Server</b>. Ative para a rede local, anote o IP e a porta, e em <b>gerenciar permissões</b> crie um token com a permissão <b>GetCurrentPresentation</b>.</p>
+        <div class="grid2">
+          <div class="field"><label>IP do computador do Holyrics</label><input id="hlyHost" placeholder="192.168.0.20"></div>
+          <div class="field"><label>Porta</label><input id="hlyPort" type="number" value="8091"></div>
+        </div>
+        <div class="field"><label>Token <span id="hlyTokenHint" class="muted"></span></label><input id="hlyToken" type="password" placeholder="deixe em branco para manter"></div>
+        <label class="switch"><input type="checkbox" id="hlyAtivo"> Conectar ao Holyrics</label>
+        <div class="row" style="margin-top:8px;gap:8px;flex-wrap:wrap">
+          <button id="hlySalvar" class="primary">Salvar e conectar</button>
+          <button id="hlyTestar">Testar conexão</button>
+          <span id="hlyMsg" class="muted"></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Aparência da letra</h2>
+        <div class="grid2">
+          <div class="field"><label>Posição</label><select id="hlyPosicao"><option value="inferior">Embaixo</option><option value="superior">Em cima</option></select></div>
+          <div class="field"><label>Tamanho</label><select id="hlyTamanho"><option value="P">Pequena</option><option value="M" selected>Média</option><option value="G">Grande</option></select></div>
+        </div>
+        <div class="field"><label>Fundo</label><select id="hlyFundo"><option value="faixa">Faixa escura de ponta a ponta</option><option value="caixa">Caixa centralizada</option><option value="sombra">Só o texto com sombra</option></select></div>
+        <div class="row" style="gap:16px;flex-wrap:wrap">
+          <label class="switch"><input type="checkbox" id="hlyMaiusculas"> Letras maiúsculas</label>
+          <label class="switch"><input type="checkbox" id="hlyTitulo"> Mostrar o nome da música</label>
+        </div>
+        <div class="hly-preview" id="hlyPreview"><div class="t"></div><div class="x">Grande é o Senhor e mui digno de louvor</div></div>
       </div>
     </div>
 
