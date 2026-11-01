@@ -86,7 +86,7 @@
   function onObsEvent(ev, d) {
     switch (ev) {
       case 'CurrentProgramSceneChanged': S.program = d.sceneName; renderScenes(); updateTally(); break;
-      case 'SceneListChanged': case 'SceneCreated': case 'SceneRemoved': case 'SceneNameChanged': refreshObs(); break;
+      case 'SceneListChanged': case 'SceneCreated': case 'SceneRemoved': case 'SceneNameChanged': refreshObs(); if ($('#tab-telas').classList.contains('active')) setTimeout(refreshTelas, 300); break;
       case 'CurrentSceneTransitionChanged': S.transition = d.transitionName; renderTransitions(); break;
       case 'StreamStateChanged': S.streaming = d.outputActive; renderStream(); break;
       case 'RecordStateChanged': S.recording = d.outputActive; renderRecord(); break;
@@ -846,6 +846,82 @@
     } catch (e) { msg.textContent = ''; toast('Não criou: ' + e.message, true); }
   });
 
+  // ---- Telas compostas: duas fontes na mesma cena (lado a lado, principal + canto, principal + faixa)
+  const TL_VISUAIS = ['dshow_input', 'browser_source', 'monitor_capture', 'window_capture', 'game_capture', 'ffmpeg_source', 'image_source', 'vlc_source', 'ndi_source', 'decklink-input'];
+  async function refreshTelas() {
+    if (!S.obs) { $('#tlLista').innerHTML = '<p class="muted">Conecte o OBS.</p>'; return; }
+    try {
+      const inputs = (await obs('GetInputList')).inputs.filter((i) => TL_VISUAIS.includes(i.inputKind) && i.inputName !== 'Overlay (legendas)');
+      for (const id of ['#tlA', '#tlB']) {
+        const sel = $(id); const cur = sel.value; sel.innerHTML = '';
+        for (const i of inputs) sel.append(el('option', { value: i.inputName, text: i.inputName }));
+        if ([...sel.options].some((o) => o.value === cur)) sel.value = cur;
+      }
+      if ($('#tlB').options.length > 1 && $('#tlA').value === $('#tlB').value) $('#tlB').selectedIndex = 1;
+      const box = $('#tlLista'); box.innerHTML = '';
+      for (const sc of S.scenes.filter((n) => n !== 'Overlay')) {
+        box.append(el('div', { class: 'rp-item' + (sc === S.program ? ' onair' : '') }, [
+          el('span', { class: 'nome', text: sc }),
+          el('button', { class: 'small', text: '👁 Ver', onclick: () => setScene(sc) }),
+          el('button', { class: 'small danger ghost', text: 'Remover', onclick: async () => {
+            if (!confirm(`Remover a cena "${sc}" do OBS? As fontes continuam existindo.`)) return;
+            try { await obs('RemoveScene', { sceneName: sc }); toast('Cena removida'); } catch (e) { toast(e.message, true); }
+          } }),
+        ]));
+      }
+      if (!inputs.length) $('#tlMsg').textContent = 'Nenhuma fonte de vídeo ainda: adicione webcams na aba Fontes ou conecte celulares.';
+    } catch (e) { toast(e.message, true); }
+  }
+  for (const r of $$('input[name="tlArr"]')) r.addEventListener('change', () => { $('#tlPipOpts').style.display = r.value === 'pip' && r.checked ? '' : 'none'; });
+  $('#tlRefresh').addEventListener('click', refreshTelas);
+  $('#tlCriar').addEventListener('click', async () => {
+    if (!S.obs) return toast('Conecte o OBS primeiro', true);
+    const nome = $('#tlNome').value.trim(), a = $('#tlA').value, b = $('#tlB').value, arr = $('input[name="tlArr"]:checked').value, msg = $('#tlMsg');
+    if (!nome) return toast('Dê um nome à tela', true);
+    if (!a || !b) return toast('Escolha as duas fontes', true);
+    if (a === b) return toast('Escolha fontes diferentes', true);
+    const W = (S.info && S.info.viewWidth) || 1920, H = (S.info && S.info.viewHeight) || 1080, M = Math.round(W * 0.02);
+    msg.textContent = 'Montando…';
+    try {
+      if (S.scenes.includes(nome)) throw new Error('Já existe uma cena com esse nome');
+      await obs('CreateScene', { sceneName: nome });
+      // caixa de cada fonte: { x, y, w, h }; a fonte é ajustada por dentro da caixa e recortada para preencher
+      let boxA, boxB;
+      if (arr === 'lado') { boxA = { x: 0, y: 0, w: W / 2, h: H }; boxB = { x: W / 2, y: 0, w: W / 2, h: H }; }
+      else if (arr === 'faixa') { const hb = Math.round(H * 0.3); boxA = { x: 0, y: 0, w: W, h: H - hb }; boxB = { x: 0, y: H - hb, w: W, h: hb }; }
+      else {
+        const t = Number($('#tlTam').value), c = $('#tlCanto').value; const bw = Math.round(W * t), bh = Math.round(bw * 9 / 16);
+        boxA = { x: 0, y: 0, w: W, h: H };
+        boxB = { x: c.startsWith('dir') ? W - bw - M : M, y: c.endsWith('cima') ? M : H - bh - M, w: bw, h: bh };
+      }
+      const place = async (fonte, box, preencher) => {
+        const r = await obs('CreateSceneItem', { sceneName: nome, sourceName: fonte });
+        const t = { positionX: box.x, positionY: box.y, boundsType: 'OBS_BOUNDS_SCALE_INNER', boundsAlignment: 0, boundsWidth: box.w, boundsHeight: box.h, cropLeft: 0, cropRight: 0, cropTop: 0, cropBottom: 0 };
+        if (preencher) {
+          // recorta a fonte na proporção da caixa, para encher sem faixas pretas
+          try {
+            const cur = (await obs('GetSceneItemTransform', { sceneName: nome, sceneItemId: r.sceneItemId })).sceneItemTransform;
+            const sw = cur.sourceWidth, sh = cur.sourceHeight;
+            if (sw > 0 && sh > 0) {
+              const alvo = box.w / box.h, atual = sw / sh;
+              if (atual > alvo) { const cw = sh * alvo; t.cropLeft = t.cropRight = Math.round((sw - cw) / 2); }
+              else if (atual < alvo) { const ch = sw / alvo; t.cropTop = t.cropBottom = Math.round((sh - ch) / 2); }
+            }
+          } catch { /* sem tamanho da fonte: fica com faixas */ }
+        }
+        await obs('SetSceneItemTransform', { sceneName: nome, sceneItemId: r.sceneItemId, sceneItemTransform: t });
+      };
+      await place(a, boxA, arr !== 'pip');
+      await place(b, boxB, arr !== 'pip');
+      const all = (await obs('GetInputList')).inputs;
+      for (const i of all) if (i.inputKind === 'wasapi_input_capture') { try { await obs('CreateSceneItem', { sceneName: nome, sourceName: i.inputName }); } catch { /* ignorar */ } }
+      if (S.scenes.includes('Overlay')) { try { await obs('CreateSceneItem', { sceneName: nome, sourceName: 'Overlay' }); } catch { /* ignorar */ } }
+      msg.textContent = `Tela "${nome}" criada. Ela já aparece nas cenas.`;
+      $('#tlNome').value = '';
+      setTimeout(refreshTelas, 600);
+    } catch (e) { msg.textContent = ''; toast('Não criou: ' + e.message, true); }
+  });
+
   $('#cfgSaveCams').addEventListener('click', async () => {
     await fetch('/api/config', { method: 'PUT', body: JSON.stringify({ cameraNames: $('#cfgCams').value.split('\n').map((s) => s.trim()).filter(Boolean) }) });
     toast('Nomes salvos'); loadInfo();
@@ -858,6 +934,7 @@
     for (const t of $$('.tab')) t.classList.toggle('active', t.id === 'tab-' + b.dataset.tab);
     if (b.dataset.tab === 'audio') refreshAudio();
     if (b.dataset.tab === 'fontes') refreshFontes();
+    if (b.dataset.tab === 'telas') refreshTelas();
     if (b.dataset.tab === 'config') refreshSaida();
   });
   function setBadge(elm, cls, label) { elm.className = 'badge ' + cls; elm.innerHTML = `<span class="dot ${cls}"></span>${label}`; }

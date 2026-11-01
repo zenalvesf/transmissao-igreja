@@ -58,6 +58,7 @@
       <button data-tab="legendas">🔤 Legendas</button>
       <button data-tab="cameras">📱 Câmeras</button>
       <button data-tab="fontes">🎥 Fontes</button>
+      <button data-tab="telas">🧩 Telas</button>
       <button data-tab="audio">🎚️ Áudio</button>
       <button data-tab="destinos">📡 Destinos</button>
       <button data-tab="holyrics">🎵 Holyrics</button>
@@ -202,6 +203,35 @@
         </div>
         <button id="ftAdd" class="primary">+ Adicionar</button>
         <span id="ftMsg" class="muted"></span>
+      </div>
+    </div>
+
+    <!-- Telas compostas (duas fontes na mesma tela) -->
+    <div class="tab" id="tab-telas">
+      <div class="card">
+        <h2>Nova tela com duas fontes</h2>
+        <p class="muted" style="margin-top:0">Monta uma cena com duas câmeras na mesma tela, já com overlay e microfones. Depois ela aparece nas cenas e no multiview como qualquer outra.</p>
+        <div class="field"><label>Nome da tela</label><input id="tlNome" placeholder="Pregador + telão"></div>
+        <div class="field"><label>Arranjo</label>
+          <div class="tl-arranjos">
+            <label class="tl-op"><input type="radio" name="tlArr" value="pip" checked><span class="tl-mini pip"><i class="a"></i><i class="b"></i></span>Principal + canto</label>
+            <label class="tl-op"><input type="radio" name="tlArr" value="lado"><span class="tl-mini lado"><i class="a"></i><i class="b"></i></span>Lado a lado</label>
+            <label class="tl-op"><input type="radio" name="tlArr" value="faixa"><span class="tl-mini faixa"><i class="a"></i><i class="b"></i></span>Principal + faixa embaixo</label>
+          </div>
+        </div>
+        <div class="grid2">
+          <div class="field"><label>Fonte principal (grande)</label><select id="tlA"></select></div>
+          <div class="field"><label>Fonte secundária (pequena)</label><select id="tlB"></select></div>
+        </div>
+        <div class="grid2" id="tlPipOpts">
+          <div class="field"><label>Canto da pequena</label><select id="tlCanto"><option value="dir-baixo">Direita embaixo</option><option value="esq-baixo">Esquerda embaixo</option><option value="dir-cima">Direita em cima</option><option value="esq-cima">Esquerda em cima</option></select></div>
+          <div class="field"><label>Tamanho da pequena</label><select id="tlTam"><option value="0.3">30% da tela</option><option value="0.25">25%</option><option value="0.4">40%</option></select></div>
+        </div>
+        <div class="row" style="gap:8px;flex-wrap:wrap"><button id="tlCriar" class="primary">Criar tela</button><span id="tlMsg" class="muted"></span></div>
+      </div>
+      <div class="card">
+        <div class="row between"><h2 style="margin:0">Cenas existentes</h2><button id="tlRefresh" class="ghost small">↻ Atualizar</button></div>
+        <div id="tlLista" class="rp-lista"></div>
       </div>
     </div>
 
