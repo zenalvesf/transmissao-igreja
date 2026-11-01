@@ -56,6 +56,11 @@ const DEFAULT_CONFIG = {
     estilo: { posicao: 'inferior', tamanho: 'M', fundo: 'faixa', maiusculas: false, titulo: false },
   },
   replay: { auto: true, segundos: 30, velocidade: 100, cena: 'Replay', fonte: 'Replay (vídeo)' },
+  traducao: {
+    ativo: false, idiomaOrigem: 'pt-BR', idiomas: ['en'],
+    provedor: 'anthropic', chave: '', modelo: 'claude-opus-5-5',
+    naLive: false, idiomaLive: 'en', // legenda traduzida por cima da transmissão
+  },
 };
 
 function readJson(file, fallback) {
@@ -72,6 +77,7 @@ config.relay = Object.assign({}, DEFAULT_CONFIG.relay, config.relay || {});
 config.holyrics = Object.assign({}, DEFAULT_CONFIG.holyrics, config.holyrics || {});
 config.holyrics.estilo = Object.assign({}, DEFAULT_CONFIG.holyrics.estilo, config.holyrics.estilo || {});
 config.replay = Object.assign({}, DEFAULT_CONFIG.replay, config.replay || {});
+config.traducao = Object.assign({}, DEFAULT_CONFIG.traducao, config.traducao || {});
 if (!Array.isArray(config.relay.destinos)) config.relay.destinos = JSON.parse(JSON.stringify(DEFAULT_CONFIG.relay.destinos));
 if (!fs.existsSync(CONFIG_PATH)) writeJson(CONFIG_PATH, config);
 
@@ -145,7 +151,7 @@ function readBody(req) {
 }
 
 // ---------------------------------------------------------------- HTTP
-const PAGES = { '/': 'index.html', '/cam': 'cam.html', '/view': 'view.html', '/overlay': 'overlay.html', '/mesa': 'mesa.html', '/multiview': 'multiview.html' };
+const PAGES = { '/': 'index.html', '/cam': 'cam.html', '/view': 'view.html', '/overlay': 'overlay.html', '/mesa': 'mesa.html', '/multiview': 'multiview.html', '/ouvir': 'ouvir.html', '/traducao': 'traducao.html' };
 
 async function handleHttp(req, res) {
   const url = new URL(req.url, 'http://x');
@@ -175,6 +181,7 @@ function publicConfig() {
   delete safe.obs.password;
   for (const d of safe.relay.destinos) { d.hasKey = !!d.key; d.keyHint = d.key ? '••••' + d.key.slice(-4) : ''; delete d.key; }
   safe.holyrics.hasToken = !!safe.holyrics.token; delete safe.holyrics.token;
+  safe.traducao.hasChave = !!safe.traducao.chave; delete safe.traducao.chave;
   return safe;
 }
 
@@ -318,6 +325,37 @@ async function handleApi(req, res, p) {
       try { return sendJson(res, await Holyrics.testar({ host: String(body.host || config.holyrics.host).trim(), port: Number(body.port) || config.holyrics.port, token })); }
       catch (e) { return sendJson(res, { ok: false, erro: String(e.message || e) }); }
     }
+    // Tradução ao vivo
+    if (p === '/api/traducao' && req.method === 'PUT') {
+      const body = await readBody(req), t = config.traducao;
+      if (typeof body.chave === 'string' && body.chave.trim()) t.chave = body.chave.trim();
+      if (body.chave === null) t.chave = '';
+      if (body.ativo !== undefined) t.ativo = !!body.ativo;
+      if (body.naLive !== undefined) t.naLive = !!body.naLive;
+      if (typeof body.provedor === 'string' && PROVEDORES[body.provedor]) t.provedor = body.provedor;
+      if (typeof body.modelo === 'string' && MODELOS[body.modelo]) t.modelo = body.modelo;
+      if (Array.isArray(body.idiomas)) t.idiomas = body.idiomas.filter((i) => IDIOMAS[i] && i !== 'pt-BR');
+      if (typeof body.idiomaLive === 'string' && IDIOMAS[body.idiomaLive]) t.idiomaLive = body.idiomaLive;
+      if (typeof body.idiomaOrigem === 'string' && body.idiomaOrigem.trim()) t.idiomaOrigem = body.idiomaOrigem.trim();
+      writeJson(CONFIG_PATH, config);
+      syncTraducao();
+      traducao.emitState();
+      broadcast('ouvinte', { type: 'traducaoConfig', idiomaOrigem: t.idiomaOrigem });
+      broadcast('traducao', { type: 'traducao', state: traducao.state() });
+      broadcast('mesa', { type: 'config', config: publicConfig() });
+      return sendJson(res, { config: publicConfig(), state: traducao.state() });
+    }
+    if (p === '/api/traducao') return sendJson(res, traducao.state());
+    if (p === '/api/traducao/testar' && req.method === 'POST') {
+      const body = await readBody(req);
+      const c = Object.assign({}, traducao.cfg());
+      for (const k of ['provedor', 'modelo', 'idiomas']) if (body[k] !== undefined) c[k] = body[k];
+      if (typeof body.chave === 'string' && body.chave.trim()) c.chave = body.chave.trim();
+      try { return sendJson(res, await Traducao.testar(c)); }
+      catch (e) { return sendJson(res, { ok: false, erro: traduzErro(e) }); }
+    }
+    if (p === '/api/traducao/limpar' && req.method === 'POST') { traducao.limpar(); broadcast('traducao', { type: 'limpar' }); return sendJson(res, { ok: true }); }
+    if (p === '/api/traducao/abrir-ouvinte' && req.method === 'POST') return sendJson(res, await abrirOuvinte());
     // OBS instalado neste computador
     if (p === '/api/obs/local') {
       return sendJson(res, Object.assign(obsLocal.status(), {
@@ -425,8 +463,16 @@ function onWsMessage(c, raw) {
         wsSend(c.ws, { type: 'relay', state: relay.state() });
         wsSend(c.ws, { type: 'holyrics', state: holyrics.state() });
         wsSend(c.ws, { type: 'replay', state: replay.state() });
+        wsSend(c.ws, { type: 'traducao', state: traducao.state() });
       } else if (c.role === 'overlay') {
         wsSend(c.ws, { type: 'overlay', overlay });
+      } else if (c.role === 'traducao') { // celular de quem lê a tradução
+        wsSend(c.ws, { type: 'traducao', state: traducao.state() });
+      } else if (c.role === 'ouvinte') { // página que escuta o microfone
+        wsSend(c.ws, { type: 'traducaoConfig', idiomaOrigem: config.traducao.idiomaOrigem });
+        // um ouvinte por vez: o novo manda o antigo parar, para não reconhecer em dobro
+        for (const old of clients.values()) if (old.role === 'ouvinte' && old.id !== c.id) wsSend(old.ws, { type: 'ouvinteCmd', cmd: 'parar' });
+        traducao.onOuvinte(c.id, { estado: 'conectado' });
       }
       break;
     }
@@ -468,6 +514,8 @@ function onWsMessage(c, raw) {
       })();
       break;
     }
+    case 'fala': if (c.role === 'ouvinte') traducao.onFala(m); break; // ouvinte -> tradução
+    case 'ouvinte': if (c.role === 'ouvinte') traducao.onOuvinte(c.id, m); break;
     case 'ping': wsSend(c.ws, { type: 'pong', t: m.t }); break;
     default: break;
   }
@@ -490,6 +538,7 @@ function attachWss(server) {
         for (const cam of camsByName(c.name)) wsSend(cam.ws, { type: 'viewerLeft', viewerId: c.id });
         pushCamList();
       }
+      if (c.role === 'ouvinte') traducao.ouvinteSaiu(c.id);
     });
   });
   setInterval(() => {
@@ -623,6 +672,48 @@ obs.onConnected = () => replay.onConnected().catch((e) => console.warn('[replay]
 obs.onDisconnected = () => replay.onDisconnected();
 obs.onEvent = (tipo, d) => replay.onEvent(tipo, d);
 if (obs.connected) obs.onConnected();
+
+// ---------------------------------------------------------------- Tradução ao vivo
+const { Traducao, IDIOMAS, MODELOS, PROVEDORES, traduzErro } = require('./traducao');
+const traducao = new Traducao(() => config.traducao);
+let parcialTimer = null, legendaTimer = null;
+traducao.on('state', (state) => broadcast('mesa', { type: 'traducao', state }));
+traducao.on('traducao', (item) => { broadcast('traducao', { type: 'item', item }); syncTraducao(); });
+traducao.on('limpar', () => syncTraducao());
+traducao.on('parcial', () => {
+  if (parcialTimer) return; // no máximo ~3 vezes por segundo
+  parcialTimer = setTimeout(() => {
+    parcialTimer = null;
+    broadcast('traducao', { type: 'parcial', texto: traducao.parcial });
+    broadcast('mesa', { type: 'traducaoParcial', texto: traducao.parcial });
+  }, 300);
+});
+/** Última frase traduzida como legenda da transmissão (camada "legenda" do overlay); some após 25 s sem fala nova. */
+function syncTraducao() {
+  const t = config.traducao, ult = traducao.historico[traducao.historico.length - 1];
+  const texto = ult ? ((ult.traducoes || {})[t.idiomaLive] || '') : '';
+  const next = { visible: !!(t.ativo && t.naLive && texto), text: texto, idioma: t.idiomaLive };
+  clearTimeout(legendaTimer);
+  if (next.visible) legendaTimer = setTimeout(() => { overlay.legenda = Object.assign({}, overlay.legenda, { visible: false }); broadcast('overlay', { type: 'overlay', overlay }); broadcast('mesa', { type: 'overlay', overlay }); }, 25000);
+  if (JSON.stringify(next) === JSON.stringify(overlay.legenda)) return;
+  overlay.legenda = next;
+  broadcast('overlay', { type: 'overlay', overlay });
+  broadcast('mesa', { type: 'overlay', overlay });
+}
+syncTraducao();
+/** Abre a página do ouvinte num navegador com reconhecimento de voz (Edge ou Chrome); o Electron não tem. */
+function abrirOuvinte() {
+  const { exec } = require('child_process');
+  const url = `http://localhost:${config.httpPort}/ouvir?auto`;
+  const tentativas = [['Edge', `start "" msedge --new-window --app="${url}"`], ['Chrome', `start "" chrome --new-window --app="${url}"`], ['navegador padrão', `start "" "${url}"`]];
+  return new Promise((resolve) => {
+    const tentar = (i) => {
+      if (i >= tentativas.length) return resolve({ ok: false, erro: 'Não achei um navegador. Abra http://localhost:' + config.httpPort + '/ouvir no Edge ou Chrome.' });
+      exec(tentativas[i][1], { windowsHide: true, timeout: 8000 }, (err) => { if (err) tentar(i + 1); else resolve({ ok: true, navegador: tentativas[i][0], url }); });
+    };
+    tentar(0);
+  });
+}
 
 // ---------------------------------------------------------------- start
 const httpServer = http.createServer(handleHttp);

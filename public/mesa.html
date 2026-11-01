@@ -19,6 +19,7 @@
     <span class="muted" id="streamInfo"></span>
     <span id="destBadges"></span>
     <span class="badge" id="hlyBadge" hidden><span class="dot"></span>Holyrics</span>
+    <span class="badge" id="trBadge" hidden><span class="dot"></span>Tradução</span>
   </div>
   <div class="actions">
     <a class="btn ghost" id="btnMultiview" href="/multiview" target="multiview" title="Abre o multiview em outra janela (bom para um segundo monitor)">🖥️ Multiview</a>
@@ -63,6 +64,7 @@
       <button data-tab="destinos">📡 Destinos</button>
       <button data-tab="holyrics">🎵 Holyrics</button>
       <button data-tab="replay">🔁 Replay</button>
+      <button data-tab="traducao">🌐 Tradução</button>
       <button data-tab="config">⚙️ Config</button>
     </nav>
 
@@ -303,6 +305,49 @@
           <label class="switch"><input type="checkbox" id="hlyTitulo"> Mostrar o nome da música</label>
         </div>
         <div class="hly-preview" id="hlyPreview"><div class="t"></div><div class="x">Grande é o Senhor e mui digno de louvor</div></div>
+      </div>
+    </div>
+
+    <!-- Tradução ao vivo -->
+    <div class="tab" id="tab-traducao">
+      <div class="card">
+        <div class="row between"><h2 style="margin:0">Tradução ao vivo</h2><span class="badge" id="trOuvinte">ouvinte desconectado</span></div>
+        <p class="muted" style="margin-top:0">O que o pregador fala é reconhecido pelo navegador e traduzido na hora. Quem não entende português abre uma página no celular e lê (ou ouve pelo fone) no idioma dele.</p>
+        <label class="switch big"><input type="checkbox" id="trAtivo"> Tradução ligada</label>
+        <div class="row" style="gap:8px;flex-wrap:wrap;margin-top:8px">
+          <button id="trAbrirOuvinte" class="primary">🎙️ Abrir o ouvinte neste PC</button>
+          <a class="btn ghost" href="/ouvir" target="ouvinte" title="Abre a página do microfone em outra aba (só funciona em Edge ou Chrome)">Abrir em outra aba</a>
+          <span id="trMsg" class="muted"></span>
+        </div>
+        <p class="muted" style="font-size:12px;margin:8px 0 0">O ouvinte precisa do Edge ou do Chrome e do microfone certo escolhido no Windows. Também pode ser um celular perto do púlpito: leia o QR da câmera e troque <code>/cam</code> por <code>/ouvir</code>.</p>
+        <div id="trAgora" class="tr-agora"><span class="muted">Nada reconhecido ainda.</span></div>
+        <div class="row between" style="margin-top:8px"><span class="muted" id="trContador" style="font-size:12px"></span><button id="trLimpar" class="ghost small">Limpar histórico</button></div>
+      </div>
+
+      <div class="card">
+        <h2>Celulares de quem precisa da tradução</h2>
+        <p class="muted" style="margin-top:0">Na mesma rede Wi‑Fi da igreja, a pessoa lê este QR code e escolhe o idioma. O botão 🔊 lê a tradução em voz pelo fone de ouvido.</p>
+        <div class="row" style="gap:14px;align-items:flex-start;flex-wrap:wrap">
+          <div id="trQr" class="tr-qrs"></div>
+          <div class="grow">
+            <div class="field"><label>Idiomas oferecidos</label><div id="trIdiomas" class="tr-idiomas"></div></div>
+            <label class="switch"><input type="checkbox" id="trNaLive"> Mostrar a tradução como legenda na transmissão</label>
+            <div class="field" id="trLiveWrap" style="margin-top:8px"><label>Idioma da legenda na live</label><select id="trIdiomaLive"></select></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Serviço de tradução</h2>
+        <div class="field"><label>Provedor</label><select id="trProvedor"></select></div>
+        <div class="field" id="trModeloWrap"><label>Modelo</label><select id="trModelo"></select></div>
+        <div class="field" id="trChaveWrap"><label>Chave da API <span id="trChaveHint" class="muted"></span></label><input id="trChave" type="password" placeholder="deixe em branco para manter" autocomplete="off"></div>
+        <p class="muted" id="trProvDica" style="font-size:12px"></p>
+        <div class="row" style="gap:8px;flex-wrap:wrap">
+          <button id="trSalvar" class="primary">Salvar</button>
+          <button id="trTestar">Testar tradução</button>
+          <span id="trTesteMsg" class="muted"></span>
+        </div>
       </div>
     </div>
 

@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Live translation</title>
+<link rel="stylesheet" href="/common.css">
+<style>
+  html, body { height: 100%; }
+  body { display: flex; flex-direction: column; overflow: hidden; background: #0b0d12; }
+  header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: var(--panel); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  header select { width: auto; min-height: 40px; font-size: 16px; }
+  header button { width: auto; min-height: 40px; padding: 6px 12px; font-size: 15px; }
+  header .sp { flex: 1; }
+  #lista { flex: 1; overflow-y: auto; padding: 16px 18px 40vh; display: flex; flex-direction: column; justify-content: flex-end; gap: 14px; scroll-behavior: smooth; }
+  .item { font-size: var(--fs, 26px); line-height: 1.35; color: var(--text); opacity: .45; transition: opacity .3s; }
+  .item:last-child { opacity: 1; font-weight: 600; }
+  .item .orig { display: block; font-size: .6em; color: var(--muted); font-weight: 400; margin-top: 2px; }
+  .item.erro { color: var(--warn); font-size: .7em; }
+  #parcial { position: fixed; left: 0; right: 0; bottom: 0; padding: 10px 18px 16px; color: var(--muted); font-style: italic; font-size: 15px; background: linear-gradient(transparent, #0b0d12 40%); min-height: 44px; }
+  #vazio { color: var(--muted); font-size: 18px; text-align: center; padding: 40px 10px; }
+  .badge.off { color: var(--danger); border-color: var(--danger); }
+  .rtl { direction: rtl; text-align: right; }
+</style>
+</head>
+<body>
+<header>
+  <select id="idioma" title="Language"></select>
+  <button id="voz" title="Read aloud">🔇</button>
+  <button id="menor">A-</button><button id="maior">A+</button>
+  <span class="sp"></span>
+  <span class="badge" id="status">…</span>
+</header>
+<div id="lista"><div id="vazio">Waiting for the service to start…</div></div>
+<div id="parcial"></div>
+<script src="/common.js"></script>
+<script>
+(function () {
+  const { Hub, $, el } = window.TI;
+  const NOMES = { en: 'English', es: 'Español', fr: 'Français', de: 'Deutsch', it: 'Italiano', zh: '中文', ja: '日本語', ko: '한국어', ru: 'Русский', ar: 'العربية', nl: 'Nederlands', pl: 'Polski', uk: 'Українська', 'pt-BR': 'Português' };
+  const VOZ = { en: 'en-US', es: 'es-ES', fr: 'fr-FR', de: 'de-DE', it: 'it-IT', zh: 'zh-CN', ja: 'ja-JP', ko: 'ko-KR', ru: 'ru-RU', ar: 'ar-SA', nl: 'nl-NL', pl: 'pl-PL', uk: 'uk-UA', 'pt-BR': 'pt-BR' };
+  const UI = {
+    en: { wait: 'Waiting for the service to start…', off: 'translation paused', on: 'live', orig: 'Show Portuguese too', speak: 'Read aloud' },
+    es: { wait: 'Esperando que empiece el servicio…', off: 'traducción en pausa', on: 'en vivo' },
+    fr: { wait: 'En attente du début du culte…', off: 'traduction en pause', on: 'en direct' },
+    de: { wait: 'Warten auf den Beginn des Gottesdienstes…', off: 'Übersetzung pausiert', on: 'live' },
+  };
+  const lista = $('#lista'), parcialEl = $('#parcial'), sel = $('#idioma'), vozBtn = $('#voz');
+  let idiomas = ['en'], idioma = localStorage.getItem('ti-idioma') || '', falar = false, fs = Number(localStorage.getItem('ti-fs')) || 26, ativo = false, historico = [];
+  document.documentElement.style.setProperty('--fs', fs + 'px');
+
+  function t(k) { const u = UI[idioma] || UI.en; return u[k] || UI.en[k]; }
+  function renderSel() {
+    sel.innerHTML = '';
+    for (const i of [...idiomas, 'pt-BR']) sel.append(el('option', { value: i, text: NOMES[i] || i }));
+    if (!idiomas.includes(idioma) && idioma !== 'pt-BR') idioma = idiomas[0] || 'en';
+    sel.value = idioma;
+    document.body.classList.toggle('rtl', idioma === 'ar');
+  }
+  function textoDe(item) { return idioma === 'pt-BR' ? item.original : (item.traducoes && item.traducoes[idioma]) || ''; }
+  function render() {
+    lista.innerHTML = '';
+    const itens = historico.filter((it) => textoDe(it) || it.erro);
+    if (!itens.length) { lista.append(el('div', { id: 'vazio', text: t('wait') })); return; }
+    for (const it of itens) {
+      const txt = textoDe(it);
+      if (!txt && it.erro) { lista.append(el('div', { class: 'item erro', text: '⚠ ' + it.erro })); continue; }
+      lista.append(el('div', { class: 'item', text: txt }));
+    }
+    lista.scrollTop = lista.scrollHeight;
+  }
+  function status() { const b = $('#status'); b.className = 'badge ' + (ativo ? 'ok' : 'off'); b.textContent = ativo ? t('on') : t('off'); }
+
+  function dizer(txt) {
+    if (!falar || !txt || !window.speechSynthesis) return;
+    const u = new SpeechSynthesisUtterance(txt); u.lang = VOZ[idioma] || 'en-US'; u.rate = 1.05;
+    speechSynthesis.speak(u);
+  }
+
+  const hub = new Hub({ role: 'traducao' }, (m) => {
+    if (m.type === 'traducao') { // estado completo
+      idiomas = m.state.idiomas || ['en']; ativo = !!m.state.ativo; historico = m.state.historico || [];
+      renderSel(); render(); status();
+    }
+    if (m.type === 'item') { historico.push(m.item); if (historico.length > 60) historico.shift(); render(); dizer(textoDe(m.item)); }
+    if (m.type === 'parcial') parcialEl.textContent = m.texto ? '… ' + m.texto : '';
+    if (m.type === 'limpar') { historico = []; render(); }
+  }, (st) => { if (st !== 'online') { const b = $('#status'); b.className = 'badge off'; b.textContent = 'offline'; } else status(); });
+
+  sel.addEventListener('change', () => { idioma = sel.value; localStorage.setItem('ti-idioma', idioma); document.body.classList.toggle('rtl', idioma === 'ar'); render(); status(); });
+  vozBtn.addEventListener('click', () => {
+    falar = !falar; vozBtn.textContent = falar ? '🔊' : '🔇';
+    if (falar) dizer(textoDe(historico[historico.length - 1] || {}) || ' '); else speechSynthesis.cancel();
+  });
+  $('#maior').addEventListener('click', () => { fs = Math.min(60, fs + 3); document.documentElement.style.setProperty('--fs', fs + 'px'); localStorage.setItem('ti-fs', fs); });
+  $('#menor').addEventListener('click', () => { fs = Math.max(14, fs - 3); document.documentElement.style.setProperty('--fs', fs + 'px'); localStorage.setItem('ti-fs', fs); });
+  // Mantém a tela acesa enquanto a página está aberta
+  if (navigator.wakeLock) { let lock = null; const pedir = () => navigator.wakeLock.request('screen').then((l) => { lock = l; }).catch(() => {}); pedir(); document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && (!lock || lock.released)) pedir(); }); }
+})();
+</script>
+</body>
+</html>

@@ -13,6 +13,7 @@
     relay: null, // estado do multidestino
     holyrics: null, // estado da conexão com o Holyrics
     replay: null, // estado do replay instantâneo
+    traducao: null, trParcial: '', // tradução ao vivo
   };
   const pending = new Map(); let reqId = 1;
 
@@ -55,16 +56,18 @@
       case 'presets': S.presets = m.presets; renderPresets(); break;
       case 'cams': S.cams = m.cams; renderCams(); updateTally(); break;
       case 'camStats': { const c = S.cams.find((x) => x.id === m.id); if (c) { c.meta = Object.assign({}, c.meta, m.stats); renderCams(); } break; }
-      case 'config': S.config = m.config; renderConfig(); renderDests(); renderHolyConfig(); renderReplayConfig(); break;
+      case 'config': S.config = m.config; renderConfig(); renderDests(); renderHolyConfig(); renderReplayConfig(); renderTrConfig(); break;
       case 'relay': S.relay = m.state; renderRelay(); break;
       case 'holyrics': S.holyrics = m.state; renderHoly(); break;
       case 'replay': S.replay = m.state; renderReplay(); break;
+      case 'traducao': S.traducao = m.state; renderTr(); break;
+      case 'traducaoParcial': S.trParcial = m.texto || ''; renderTrAgora(); break;
       default: break;
     }
   }
 
   async function loadInfo() {
-    try { S.info = await (await fetch('/api/info')).json(); renderQr(); renderNet(); } catch { /* ignorar */ }
+    try { S.info = await (await fetch('/api/info')).json(); renderQr(); renderNet(); renderTrQr(); } catch { /* ignorar */ }
   }
 
   // ------------------------------------------------------------ OBS: cenas, programa, transição, status
@@ -922,6 +925,113 @@
     } catch (e) { msg.textContent = ''; toast('Não criou: ' + e.message, true); }
   });
 
+  // ---- Tradução ao vivo
+  const TR_IDIOMAS = { en: 'Inglês', es: 'Espanhol', fr: 'Francês', de: 'Alemão', it: 'Italiano', zh: 'Chinês', ja: 'Japonês', ko: 'Coreano', ru: 'Russo', ar: 'Árabe', nl: 'Holandês', pl: 'Polonês', uk: 'Ucraniano' };
+  const TR_PROVEDORES = { anthropic: 'Claude (Anthropic) — precisa de chave, melhor qualidade', deepl: 'DeepL — precisa de chave (tem plano gratuito)', google: 'Google Tradutor — sem chave, sem garantia', nenhum: 'Nenhum — só o que foi falado, em português' };
+  const TR_MODELOS = { 'claude-opus-5-5': 'Claude Opus 5.5 (melhor qualidade)', 'claude-sonnet-5-5': 'Claude Sonnet 5.5 (equilíbrio)', 'claude-haiku-5-5': 'Claude Haiku 5.5 (mais rápido e barato)' };
+  const TR_DICAS = {
+    anthropic: 'Crie a chave em console.anthropic.com → API Keys e coloque créditos na conta. Cada frase custa frações de centavo: um culto inteiro sai por centavos de dólar com o Haiku e por poucos dólares com o Opus.',
+    deepl: 'Crie a conta em deepl.com/pro-api. O plano gratuito dá 500 mil caracteres por mês (uns 10 cultos); a chave gratuita termina em ":fx".',
+    google: 'Usa o tradutor do Google sem chave. Costuma funcionar, mas o Google pode bloquear sem aviso. Bom para experimentar.',
+    nenhum: 'Não traduz: mostra só o que foi falado, em português. Serve como legenda para quem tem dificuldade de audição.',
+  };
+  const TR_OUVINTE = { desconectado: ['danger', 'ouvinte desconectado'], conectado: ['warn', 'ouvinte aberto (parado)'], parado: ['warn', 'ouvinte parado'], ouvindo: ['ok', 'ouvindo 🎙️'], erro: ['danger', 'ouvinte com erro'] };
+  let trEditing = false, trQrKey = '';
+  async function trSet(patch) {
+    try {
+      const r = await (await fetch('/api/traducao', { method: 'PUT', body: JSON.stringify(patch) })).json();
+      if (r.config) { S.config = r.config; renderTrConfig(); }
+      if (r.state) { S.traducao = r.state; renderTr(); }
+      return r;
+    } catch (e) { toast('Não consegui salvar: ' + e.message, true); }
+  }
+  function trIdiomasMarcados() { return $$('#trIdiomas input:checked').map((i) => i.value); }
+  function renderTrConfig() {
+    const t = S.config && S.config.traducao; if (!t) return;
+    $('#trAtivo').checked = !!t.ativo; $('#trNaLive').checked = !!t.naLive;
+    if (!$('#trProvedor').options.length) for (const [k, v] of Object.entries(TR_PROVEDORES)) $('#trProvedor').append(el('option', { value: k, text: v }));
+    if (!$('#trModelo').options.length) for (const [k, v] of Object.entries(TR_MODELOS)) $('#trModelo').append(el('option', { value: k, text: v }));
+    if (!trEditing) { $('#trProvedor').value = t.provedor || 'anthropic'; $('#trModelo').value = t.modelo || 'claude-opus-5-5'; }
+    $('#trChaveHint').textContent = t.hasChave ? '(já salva)' : '(nenhuma)';
+    trProvedorUI();
+    const box = $('#trIdiomas'); box.innerHTML = '';
+    for (const [k, v] of Object.entries(TR_IDIOMAS)) {
+      const inp = el('input', { type: 'checkbox', value: k, checked: (t.idiomas || []).includes(k) });
+      inp.addEventListener('change', () => { const sel = trIdiomasMarcados(); if (!sel.length) { inp.checked = true; return toast('Deixe pelo menos um idioma', true); } trSet({ idiomas: sel }); });
+      box.append(el('label', { class: 'tr-chip' + (inp.checked ? ' on' : '') }, [inp, v]));
+    }
+    const live = $('#trIdiomaLive'); live.innerHTML = '';
+    for (const k of (t.idiomas || [])) live.append(el('option', { value: k, text: TR_IDIOMAS[k] || k }));
+    live.value = t.idiomaLive; if (!live.value && live.options.length) live.selectedIndex = 0;
+    $('#trLiveWrap').style.display = t.naLive ? '' : 'none';
+    renderTr();
+  }
+  function trProvedorUI() {
+    const p = $('#trProvedor').value;
+    $('#trModeloWrap').style.display = p === 'anthropic' ? '' : 'none';
+    $('#trChaveWrap').style.display = (p === 'anthropic' || p === 'deepl') ? '' : 'none';
+    $('#trProvDica').textContent = TR_DICAS[p] || '';
+  }
+  function renderTrQr() {
+    if (!S.info) return;
+    const key = S.info.ips.map((x) => x.ip).join(',') + ':' + S.info.httpsPort; if (key === trQrKey) return; trQrKey = key;
+    const box = $('#trQr'); box.innerHTML = '';
+    for (const { ip, iface } of S.info.ips) {
+      const url = `https://${ip}:${S.info.httpsPort}/traducao`;
+      box.append(el('div', { class: 'qr' }, [el('img', { src: '/qr.svg?text=' + encodeURIComponent(url), width: 150, height: 150, alt: 'QR' }), el('div', { html: `<b>${iface}</b><br>${url}` })]));
+    }
+    if (!S.info.ips.length) box.innerHTML = '<span class="muted">Sem rede: conecte o PC ao Wi‑Fi da igreja.</span>';
+  }
+  function renderTr() {
+    const st = S.traducao, t = (S.config && S.config.traducao) || {};
+    const badge = $('#trBadge'); badge.hidden = !t.ativo;
+    if (!st) return;
+    const ouv = st.ouvinte || { estado: 'desconectado' };
+    const [cls, label] = TR_OUVINTE[ouv.estado] || ['', ouv.estado];
+    const ob = $('#trOuvinte'); ob.className = 'badge ' + cls; ob.textContent = label + (ouv.estado === 'erro' && ouv.erro ? ' · ' + ouv.erro : '');
+    if (t.ativo) setBadge(badge, ouv.estado === 'ouvindo' ? (st.erro ? 'warn' : 'ok') : 'danger', 'Tradução');
+    const c = st.contador || {};
+    $('#trContador').textContent = (c.pedidos ? `${c.pedidos} frases · ${c.falhas || 0} falhas` : '') + (st.erro ? ' · ⚠ ' + st.erro : '') + (st.fila ? ` · ${st.fila} na fila` : '');
+    renderTrAgora();
+  }
+  function renderTrAgora() {
+    const st = S.traducao, box = $('#trAgora'), t = (S.config && S.config.traducao) || {};
+    box.innerHTML = '';
+    const hist = (st && st.historico) || [];
+    if (!hist.length && !S.trParcial) { box.innerHTML = '<span class="muted">' + (t.ativo ? 'Nada reconhecido ainda. Abra o ouvinte e clique em "Começar a ouvir".' : 'Ligue a tradução acima.') + '</span>'; return; }
+    for (const it of hist.slice(-3)) {
+      const linhas = [el('div', { class: 'orig', text: it.original })];
+      for (const [k, v] of Object.entries(it.traducoes || {})) if (v) linhas.push(el('div', { class: 'trad' }, [el('b', { text: (TR_IDIOMAS[k] || k) + ': ' }), v]));
+      if (it.erro) linhas.push(el('div', { class: 'trad erro', text: '⚠ ' + it.erro }));
+      box.append(el('div', { class: 'tr-item' }, linhas));
+    }
+    if (S.trParcial) box.append(el('div', { class: 'tr-parcial', text: '… ' + S.trParcial }));
+  }
+  $('#trAtivo').addEventListener('change', () => trSet({ ativo: $('#trAtivo').checked }));
+  $('#trNaLive').addEventListener('change', () => trSet({ naLive: $('#trNaLive').checked }));
+  $('#trIdiomaLive').addEventListener('change', () => trSet({ idiomaLive: $('#trIdiomaLive').value }));
+  for (const id of ['#trProvedor', '#trModelo', '#trChave']) { $(id).addEventListener('focus', () => { trEditing = true; }); $(id).addEventListener('blur', () => { trEditing = false; }); }
+  $('#trProvedor').addEventListener('change', trProvedorUI);
+  $('#trSalvar').addEventListener('click', async () => {
+    const r = await trSet({ provedor: $('#trProvedor').value, modelo: $('#trModelo').value, chave: $('#trChave').value });
+    if (r) { $('#trChave').value = ''; trEditing = false; toast('Tradução salva'); }
+  });
+  $('#trTestar').addEventListener('click', async () => {
+    const msg = $('#trTesteMsg'); msg.textContent = 'Traduzindo uma frase de teste…';
+    try {
+      const r = await (await fetch('/api/traducao/testar', { method: 'POST', body: JSON.stringify({ provedor: $('#trProvedor').value, modelo: $('#trModelo').value, chave: $('#trChave').value, idiomas: trIdiomasMarcados() }) })).json();
+      msg.textContent = r.ok ? `Funcionou em ${(r.ms / 1000).toFixed(1)} s · ${TR_IDIOMAS[r.idioma] || r.idioma}: "${r.texto}"` : 'Falhou: ' + r.erro;
+    } catch (e) { msg.textContent = 'Falhou: ' + e.message; }
+  });
+  $('#trAbrirOuvinte').addEventListener('click', async () => {
+    const msg = $('#trMsg'); msg.textContent = 'Abrindo…';
+    try {
+      const r = await (await fetch('/api/traducao/abrir-ouvinte', { method: 'POST' })).json();
+      msg.textContent = r.ok ? `Aberto no ${r.navegador}. Clique em "Começar a ouvir" se não começar sozinho.` : r.erro;
+    } catch (e) { msg.textContent = e.message; }
+  });
+  $('#trLimpar').addEventListener('click', () => fetch('/api/traducao/limpar', { method: 'POST' }));
+
   $('#cfgSaveCams').addEventListener('click', async () => {
     await fetch('/api/config', { method: 'PUT', body: JSON.stringify({ cameraNames: $('#cfgCams').value.split('\n').map((s) => s.trim()).filter(Boolean) }) });
     toast('Nomes salvos'); loadInfo();
@@ -936,6 +1046,7 @@
     if (b.dataset.tab === 'fontes') refreshFontes();
     if (b.dataset.tab === 'telas') refreshTelas();
     if (b.dataset.tab === 'config') refreshSaida();
+    if (b.dataset.tab === 'traducao') renderTrQr();
   });
   function setBadge(elm, cls, label) { elm.className = 'badge ' + cls; elm.innerHTML = `<span class="dot ${cls}"></span>${label}`; }
   let toastTimer;

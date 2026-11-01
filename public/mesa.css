@@ -170,3 +170,18 @@ button.danger.ghost { background: transparent; color: var(--danger); border-colo
 .tl-mini.pip .a { inset: 0; } .tl-mini.pip .b { right: 4px; bottom: 4px; width: 30px; height: 17px; }
 .tl-mini.lado .a { left: 0; top: 0; bottom: 0; width: 50%; } .tl-mini.lado .b { right: 0; top: 0; bottom: 0; width: 49%; }
 .tl-mini.faixa .a { left: 0; right: 0; top: 0; height: 70%; } .tl-mini.faixa .b { left: 0; right: 0; bottom: 0; height: 29%; }
+
+/* ---- Tradução ao vivo ---- */
+.tr-agora { margin-top: 10px; padding: 10px 12px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; min-height: 44px; display: flex; flex-direction: column; gap: 8px; }
+.tr-item { padding-bottom: 8px; border-bottom: 1px dashed var(--line); }
+.tr-item:last-of-type { border-bottom: 0; padding-bottom: 0; }
+.tr-item .orig { color: var(--muted); font-size: 13px; }
+.tr-item .trad { font-size: 15px; margin-top: 2px; }
+.tr-item .trad.erro { color: var(--warn); font-size: 13px; }
+.tr-parcial { color: var(--muted); font-style: italic; font-size: 13px; }
+.tr-qrs { display: flex; flex-direction: column; gap: 10px; }
+.tr-qrs .qr { font-size: 11px; }
+.tr-idiomas { display: flex; flex-wrap: wrap; gap: 6px; }
+.tr-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel-2); cursor: pointer; font-size: 13px; color: var(--text); }
+.tr-chip input { width: 16px; height: 16px; min-height: 0; padding: 0; margin: 0; accent-color: var(--ok); }
+.tr-chip:has(input:checked) { border-color: var(--accent); background: rgba(79,140,255,.12); }

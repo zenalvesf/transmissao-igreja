@@ -25,6 +25,7 @@
   <div class="links">
     <a href="/mesa"><div class="card"><div class="big">🎛️ Mesa de transmissão</div><div class="muted">Troca de cenas, legendas, roteiro, câmeras e áudio. Abra no PC ou em um tablet.</div></div></a>
     <a href="/cam"><div class="card"><div class="big">📱 Câmera (celular)</div><div class="muted">Abra no celular pelo QR code abaixo. Precisa do endereço https.</div></div></a>
+    <a href="/traducao"><div class="card"><div class="big">🌐 Tradução ao vivo</div><div class="muted">Para quem não entende português: leia o QR code "Tradução" abaixo no celular.</div></div></a>
     <a href="/overlay" target="_blank"><div class="card"><div class="big">🔤 Overlay</div><div class="muted">Fonte de navegador do OBS com legendas, versículos e avisos.</div></div></a>
   </div>
 
@@ -46,8 +47,13 @@ fetch('/api/info').then(r => r.json()).then(info => {
     const url = `https://${ip}:${info.httpsPort}/cam`;
     const box = document.createElement('div'); box.className = 'qr';
     const img = document.createElement('img'); img.src = '/qr.svg?text=' + encodeURIComponent(url); img.width = 200; img.height = 200;
-    const label = document.createElement('div'); label.innerHTML = `<b>${iface}</b><br>${url}`;
+    const label = document.createElement('div'); label.innerHTML = `<b>${iface}</b> · câmera<br>${url}`;
     box.append(img, label); qrs.append(box);
+    const url2 = `https://${ip}:${info.httpsPort}/traducao`;
+    const box2 = document.createElement('div'); box2.className = 'qr';
+    const img2 = document.createElement('img'); img2.src = '/qr.svg?text=' + encodeURIComponent(url2); img2.width = 200; img2.height = 200;
+    const label2 = document.createElement('div'); label2.innerHTML = `<b>${iface}</b> · tradução<br>${url2}`;
+    box2.append(img2, label2); qrs.append(box2);
   }
   const urls = document.getElementById('urls');
   const base = `http://localhost:${info.httpPort}`;

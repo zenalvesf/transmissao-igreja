@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ouvinte — tradução ao vivo</title>
+<link rel="stylesheet" href="/common.css">
+<style>
+  main { max-width: 760px; margin: 0 auto; padding: 24px 18px; display: flex; flex-direction: column; gap: 14px; }
+  .big { font-size: 22px; min-height: 64px; }
+  .big.on { background: var(--live); border-color: var(--live); color: #fff; animation: pulse 1.6s infinite; }
+  @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(255,59,59,.5); } 50% { box-shadow: 0 0 0 12px rgba(255,59,59,0); } }
+  .texto { min-height: 120px; font-size: 22px; line-height: 1.4; }
+  .texto .parcial { color: var(--muted); font-style: italic; }
+  .texto .final { color: var(--text); }
+  .nivel { height: 8px; background: var(--panel-2); border-radius: 4px; overflow: hidden; margin-top: 10px; }
+  .nivel i { display: block; height: 100%; width: 0; background: var(--ok); transition: width .08s; }
+  .erro { color: var(--danger); }
+  ol { padding-left: 20px; line-height: 1.6; }
+</style>
+</head>
+<body>
+<main>
+  <div class="row between" style="align-items:center">
+    <h1 style="margin:0">🎙️ Ouvinte da tradução</h1>
+    <span class="badge" id="srv">servidor</span>
+  </div>
+  <p class="muted" style="margin:0">Esta página escuta o microfone e manda o que o pregador fala para a mesa, que traduz. Deixe-a aberta durante o culto, com o microfone certo escolhido no Windows (ou no celular, perto do púlpito).</p>
+
+  <div class="card">
+    <button id="btn" class="primary big wide">🎙️ Começar a ouvir</button>
+    <div class="nivel"><i id="nivel"></i></div>
+    <div class="row between" style="margin-top:10px"><span id="status" class="muted">Parado.</span><span id="idioma" class="muted"></span></div>
+    <div id="erro" class="erro"></div>
+  </div>
+
+  <div class="card">
+    <h2>O que está sendo reconhecido</h2>
+    <div class="texto"><span id="final" class="final"></span> <span id="parcial" class="parcial"></span></div>
+  </div>
+
+  <div class="card" id="ajuda">
+    <h2>Se não funcionar</h2>
+    <ol class="muted">
+      <li>Esta página precisa do <b>Edge ou Chrome</b> (no celular: Chrome no Android, Safari no iPhone). Outros navegadores não têm reconhecimento de voz.</li>
+      <li>Permita o microfone quando o navegador pedir. No PC, escolha o microfone certo em <b>Configurações do Windows → Som → Entrada</b>.</li>
+      <li>Precisa de internet: o reconhecimento de voz do navegador usa o servidor do Google ou da Microsoft.</li>
+    </ol>
+  </div>
+</main>
+<script src="/common.js"></script>
+<script>
+(function () {
+  const { Hub, $ } = window.TI;
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let rec = null, querOuvir = false, lang = 'pt-BR', reinicios = 0, audioCtx = null, stream = null;
+  const btn = $('#btn'), status = $('#status'), erroEl = $('#erro'), finalEl = $('#final'), parcialEl = $('#parcial');
+
+  const hub = new Hub({ role: 'ouvinte' }, onMessage, (st) => {
+    const b = $('#srv'); b.className = 'badge ' + (st === 'online' ? 'ok' : 'danger'); b.textContent = st === 'online' ? 'conectado à mesa' : 'sem servidor';
+  });
+  function onMessage(m) {
+    if (m.type === 'traducaoConfig') { lang = m.idiomaOrigem || 'pt-BR'; $('#idioma').textContent = 'Idioma: ' + lang; if (rec) rec.lang = lang; }
+    if (m.type === 'ouvinteCmd') { if (m.cmd === 'parar') parar(); }
+  }
+  function estado(e, erro) { hub.send({ type: 'ouvinte', estado: e, erro: erro || '' }); }
+
+  if (!SR) {
+    btn.disabled = true;
+    erroEl.textContent = 'Este navegador não tem reconhecimento de voz. Abra esta página no Microsoft Edge ou no Google Chrome.';
+    estado('erro', 'navegador sem reconhecimento de voz');
+  }
+
+  function criar() {
+    const r = new SR();
+    r.lang = lang; r.continuous = true; r.interimResults = true; r.maxAlternatives = 1;
+    r.onstart = () => { status.textContent = 'Ouvindo…'; erroEl.textContent = ''; btn.textContent = '⏹ Parar de ouvir'; btn.classList.add('on'); estado('ouvindo'); reinicios = 0; };
+    r.onresult = (ev) => {
+      let parcial = '';
+      for (let i = ev.resultIndex; i < ev.results.length; i++) {
+        const res = ev.results[i], t = res[0].transcript;
+        if (res.isFinal) { hub.send({ type: 'fala', texto: t, final: true }); finalEl.textContent = t.trim(); }
+        else parcial += t;
+      }
+      parcialEl.textContent = parcial.trim();
+      if (parcial.trim()) hub.send({ type: 'fala', texto: parcial, final: false });
+    };
+    r.onerror = (ev) => {
+      const e = ev.error;
+      if (e === 'no-speech' || e === 'aborted') return; // normal: silêncio ou reinício
+      const msgs = { 'not-allowed': 'Microfone bloqueado. Permita o microfone para este site e tente de novo.', 'audio-capture': 'Nenhum microfone encontrado.', network: 'Sem internet para o reconhecimento de voz.', 'service-not-allowed': 'O navegador não permitiu o serviço de voz.' };
+      erroEl.textContent = msgs[e] || ('Erro do reconhecimento: ' + e);
+      estado('erro', msgs[e] || e);
+      if (e === 'not-allowed' || e === 'service-not-allowed' || e === 'audio-capture') { querOuvir = false; parar(); }
+    };
+    r.onend = () => {
+      // O navegador encerra a sessão de tempos em tempos: reabre enquanto o operador quiser ouvir
+      if (querOuvir) { reinicios++; setTimeout(() => { if (querOuvir) { try { r.start(); } catch { /* já rodando */ } } }, reinicios > 5 ? 2000 : 250); }
+      else { status.textContent = 'Parado.'; btn.textContent = '🎙️ Começar a ouvir'; btn.classList.remove('on'); estado('parado'); }
+    };
+    return r;
+  }
+
+  async function medidor() {
+    // Barra de nível só para o operador ver que o som está chegando (o reconhecimento usa o próprio microfone)
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const src = audioCtx.createMediaStreamSource(stream), an = audioCtx.createAnalyser(); an.fftSize = 512; src.connect(an);
+      const buf = new Uint8Array(an.frequencyBinCount);
+      (function loop() { if (!stream) return; an.getByteTimeDomainData(buf); let s = 0; for (const v of buf) s += (v - 128) * (v - 128); $('#nivel').style.width = Math.min(100, Math.sqrt(s / buf.length) * 3) + '%'; requestAnimationFrame(loop); })();
+    } catch { /* sem medidor */ }
+  }
+  function parar() {
+    querOuvir = false;
+    if (rec) { try { rec.stop(); } catch { /* ignorar */ } }
+    if (stream) { for (const t of stream.getTracks()) t.stop(); stream = null; }
+    if (audioCtx) { audioCtx.close().catch(() => {}); audioCtx = null; }
+    $('#nivel').style.width = '0';
+  }
+  btn.addEventListener('click', () => {
+    if (querOuvir) return parar();
+    querOuvir = true; rec = criar();
+    try { rec.start(); } catch (e) { erroEl.textContent = 'Não consegui iniciar: ' + e.message; querOuvir = false; }
+    medidor();
+  });
+  window.addEventListener('beforeunload', () => { if (querOuvir) estado('parado'); });
+  if (new URLSearchParams(location.search).has('auto')) setTimeout(() => btn.click(), 300);
+})();
+</script>
+</body>
+</html>

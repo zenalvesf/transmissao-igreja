@@ -58,9 +58,10 @@ Para publicar uma versão: aumente `version` em `package.json`, rode `npm run di
 2. **Celulares:** leia o QR code da página inicial (ou da aba Câmeras da mesa). O navegador vai avisar que o certificado não é confiável: toque em **Avançado → Continuar** (no iPhone: **Mostrar detalhes → Visitar este site**). Isso acontece só na primeira vez em cada aparelho. Escolha o nome da câmera, confira a qualidade e toque em **Iniciar câmera**. Deixe o celular no tripé carregando; a tela fica ligada sozinha.
 3. **Destinos:** se usar YouTube + Instagram, confira na aba Destinos se os dois estão ligados e com a chave do dia (a do Instagram muda a cada live).
 4. **Holyrics:** na aba Holyrics, confira se está "conectado" e se **Mostrar a letra na live** está ligado. A letra do telão entra sozinha na transmissão.
-5. **Mesa:** abra http://localhost:8080/mesa no PC, ou `http://IP-DO-PC:8080/mesa` em um tablet.
-6. Siga o **Roteiro**: o botão **Próximo** troca a cena e dispara a legenda configurada em cada item. Teclas **1 a 9** trocam cenas, **Espaço** avança o roteiro, **R** salva um replay.
-7. **Multiview:** o botão no alto da mesa abre uma janela com o programa e todas as cenas ao vivo, para um segundo monitor ou TV. Clicar numa cena corta para ela.
+5. **Tradução:** se houver visitantes que não falam português, aba Tradução → **Tradução ligada** → **Abrir o ouvinte neste PC** → **Começar a ouvir**. Eles leem o QR code da aba.
+6. **Mesa:** abra http://localhost:8080/mesa no PC, ou `http://IP-DO-PC:8080/mesa` em um tablet.
+7. Siga o **Roteiro**: o botão **Próximo** troca a cena e dispara a legenda configurada em cada item. Teclas **1 a 9** trocam cenas, **Espaço** avança o roteiro, **R** salva um replay.
+8. **Multiview:** o botão no alto da mesa abre uma janela com o programa e todas as cenas ao vivo, para um segundo monitor ou TV. Clicar numa cena corta para ela.
 
 ### Tally (luz de "no ar")
 Quando a cena no ar contém a fonte de um celular, a tela desse celular ganha uma borda vermelha e o aviso **NO AR**. Isso usa o nome da câmera: a fonte no OBS precisa conter o nome (ex.: `Celular 1 (celular)`), que é como a configuração automática já cria.
@@ -114,6 +115,26 @@ Desde a versão 1.5 o OBS é só o motor. O programa abre o OBS junto, minimizad
 - **Config → Conexão com o OBS:** "Abrir o OBS escondido" e "Abrir o OBS junto com este programa" podem ser desligados para quem prefere ver a janela do OBS. **Fechar OBS** fecha com cuidado (recusa se estiver transmitindo).
 - Para abrir a janela do OBS quando precisar de algo que a mesa ainda não faz: ícone do OBS na bandeja do Windows → Mostrar.
 
+## Tradução ao vivo (para quem não entende português)
+
+O que o pregador fala é reconhecido pelo navegador e traduzido na hora. Quem precisa lê (ou ouve pelo fone) no próprio celular, e o operador pode mostrar a tradução como legenda na transmissão.
+
+Como funciona: (1) a página **ouvinte** (`/ouvir`), aberta no Edge ou Chrome do PC ou num celular perto do púlpito, escuta o microfone e manda o texto para a mesa; (2) a mesa envia cada frase ao serviço de tradução escolhido; (3) os celulares que abriram `/traducao` recebem as frases no idioma que escolheram.
+
+Configuração, na aba **Tradução** da mesa:
+
+1. **Serviço de tradução:** escolha o provedor e cole a chave; **Testar tradução** confere na hora.
+   - **Claude (Anthropic):** melhor qualidade, entende o contexto do sermão e os nomes bíblicos. Crie a chave em console.anthropic.com e coloque créditos. O modelo padrão é o Opus 5.5; o Haiku 5.5 é mais rápido e muito mais barato (um culto inteiro custa centavos de dólar).
+   - **DeepL:** plano gratuito com 500 mil caracteres por mês (uns 10 cultos); a chave gratuita termina em `:fx`.
+   - **Google Tradutor:** sem chave, mas sem garantia (o Google pode bloquear sem aviso).
+   - **Nenhum:** só transcreve em português; serve de legenda para quem tem dificuldade de audição.
+2. **Idiomas oferecidos:** marque os idiomas que vão aparecer no celular dos membros.
+3. Ligue **Tradução ligada** e clique em **Abrir o ouvinte neste PC**. Abre uma janela do Edge (ou Chrome); permita o microfone e clique em **Começar a ouvir**. Antes, escolha o microfone certo em **Configurações do Windows → Som → Entrada** (o ideal é a saída da mesa de som ligada no PC). Deixe a janela aberta o culto inteiro.
+4. **Membros:** a pessoa lê o QR code da aba Tradução (ou da página inicial) no celular, aceita o aviso do certificado (igual às câmeras) e escolhe o idioma. O botão **🔊** lê em voz alta pelo fone de ouvido; **A-** e **A+** mudam o tamanho da letra.
+5. Opcional: **Mostrar a tradução como legenda na transmissão** coloca a última frase traduzida no rodapé da live, no idioma escolhido. Ela some sozinha depois de 25 s sem fala nova.
+
+Limites: o reconhecimento de voz é o do navegador (Google no Chrome, Microsoft no Edge) e precisa de internet. A frase só é traduzida quando o reconhecimento a fecha, então a tradução chega uns 2 a 5 segundos depois da fala. A janela do próprio programa não tem reconhecimento de voz: por isso o ouvinte abre no Edge ou Chrome.
+
 ## Replay instantâneo
 
 Serve para rever um momento (batismo, apresentação das crianças, testemunho) segundos depois de acontecer. Usa o **buffer de replay** do próprio OBS: ele guarda os últimos 30 segundos do programa na memória.
@@ -162,11 +183,16 @@ transmissao-igreja/
 | `http://localhost:8080/view/NOME` | fonte do OBS. Opções: `?fit=contain` (sem cortar), `?audio=1` (com áudio do celular), `?nosignal=black` (tela preta quando cai; o padrão congela o último quadro), `?debug=1` (mostra estatísticas) |
 | `http://localhost:8080/overlay` | overlay de legendas. Opções: `?accent=ff9900` (cor da igreja), `?font=Georgia` |
 | `http://localhost:8080/multiview` | multiview: programa + cenas ao vivo, clique para cortar |
+| `http://localhost:8080/ouvir` | ouvinte da tradução: escuta o microfone (Edge ou Chrome). `?auto` começa a ouvir sozinho |
+| `https://IP:8443/traducao` | tradução ao vivo no celular de quem não entende português |
 
 ## Problemas comuns
 
 - **O celular diz que precisa de https.** Use o QR code, que já aponta para o endereço https. Se o IP do PC mudou, feche e abra o `iniciar.bat` de novo e apague a pasta `certs` para gerar um certificado com o IP novo.
 - **O OBS abriu com uma janela de "assistente de configuração automática".** Acontece só na primeira abertura do OBS num PC novo. Clique em Cancelar; depois use a qualidade da mesa.
+- **O ouvinte diz "navegador sem reconhecimento de voz".** Abra `http://localhost:8080/ouvir` no Microsoft Edge ou no Google Chrome (o botão da mesa tenta o Edge, depois o Chrome). Firefox e a janela do próprio programa não têm esse recurso.
+- **O ouvinte reconhece, mas nada é traduzido.** Na aba Tradução, o contador mostra as falhas e o motivo (chave inválida, sem créditos, sem internet). Use **Testar tradução** para confirmar o serviço. A tradução só acontece com **Tradução ligada**.
+- **O celular do membro não abre a página de tradução.** Mesmo caso das câmeras: precisa estar no Wi‑Fi da igreja e aceitar o aviso do certificado na primeira vez.
 - **"Salvar replay" falha.** O buffer precisa estar ligado (selo verde "buffer ligado" na aba Replay). Se o OBS não tem o buffer de replay ativado nas configurações, use o botão **Ativar o replay no OBS** com o OBS fechado.
 - **O Holyrics fica em "erro" na mesa.** A mensagem ao lado diz o motivo: "não aceitou a conexão" é API Server desligado ou IP errado; "token inválido" é token digitado errado ou sem a permissão GetCurrentPresentation; "tempo esgotado" costuma ser firewall no PC do Holyrics ou os PCs em redes diferentes.
 - **O OBS fica vermelho na mesa.** Na aba Config veja o que ela diz sobre o OBS: se estiver fechado, use **Abrir OBS**; se o WebSocket estiver desligado, **Habilitar WebSocket do OBS** e reabra o OBS. Se mudou a senha no OBS, salve-a em "Configurar manualmente".
