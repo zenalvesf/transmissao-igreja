@@ -37,7 +37,7 @@ if (DATA_DIR !== ROOT) { // primeira execução numa pasta nova: copia o roteiro
 const DEFAULT_CONFIG = {
   httpPort: 8080,
   httpsPort: 8443,
-  obs: { host: '127.0.0.1', port: 4455, password: '' },
+  obs: { host: '127.0.0.1', port: 4455, password: '', invisivel: true, autoAbrir: true, saidaPendente: null },
   stun: ['stun:stun.l.google.com:19302'],
   cameraNames: ['Celular 1', 'Celular 2'],
   viewWidth: 1920,
@@ -332,12 +332,41 @@ async function handleApi(req, res, p) {
       setTimeout(() => obs.reconnect(), 1000);
       return sendJson(res, { enabled: true, port: r.port, needsRestart: wasRunning });
     }
-    if (p === '/api/obs/launch' && req.method === 'POST') {
-      const ws = obsLocal.readWebsocketConfig();
-      if (!obsLocal.isObsRunning() && !(ws && ws.enabled && ws.password)) obsLocal.ensureWebsocketEnabled();
-      const r = obsLocal.launchObs();
-      for (const t of [4000, 8000, 15000]) setTimeout(() => { if (!obs.connected) obs.reconnect(); }, t);
-      return sendJson(res, r);
+    if (p === '/api/obs/launch' && req.method === 'POST') return sendJson(res, abrirObs());
+    if (p === '/api/obs/fechar' && req.method === 'POST') {
+      if (obs.connected) { try { if ((await obs.call('GetStreamStatus')).outputActive) return sendJson(res, { error: 'O OBS está transmitindo. Pare a transmissão antes de fechar.' }, 400); } catch { /* segue */ } }
+      return sendJson(res, await obsLocal.closeObs());
+    }
+    if (p === '/api/obs/reiniciar' && req.method === 'POST') {
+      if (obs.connected) { try { if ((await obs.call('GetStreamStatus')).outputActive) return sendJson(res, { error: 'O OBS está transmitindo. Pare a transmissão antes.' }, 400); } catch { /* segue */ } }
+      const c = await obsLocal.closeObs();
+      if (!c.closed) return sendJson(res, { error: 'O OBS não fechou. Feche pela bandeja do Windows e abra de novo pela mesa.' }, 400);
+      return sendJson(res, abrirObs());
+    }
+    if (p === '/api/obs/saida') {
+      let resultado = null;
+      if (req.method === 'PUT') {
+        const b = await readBody(req);
+        const q = {
+          largura: Number(b.largura) || 1920, altura: Number(b.altura) || 1080, fps: [24, 25, 30, 60].includes(Number(b.fps)) ? Number(b.fps) : 30,
+          bitrate: Math.max(500, Math.min(20000, Number(b.bitrate) || 3000)), encoder: ['x264', 'nvenc', 'qsv', 'amd'].includes(b.encoder) ? b.encoder : 'x264',
+          baseLargura: config.viewWidth || 1920, baseAltura: config.viewHeight || 1080,
+        };
+        const r = { aplicado: [], pendente: false };
+        // resolução e fps valem na hora pelo WebSocket (fora de transmissão); taxa de bits e codificador só no perfil
+        if (obs.connected) {
+          try {
+            await obs.call('SetVideoSettings', { baseWidth: q.baseLargura, baseHeight: q.baseAltura, outputWidth: q.largura, outputHeight: q.altura, fpsNumerator: q.fps, fpsDenominator: 1 });
+            r.aplicado.push('resolução e fps');
+          } catch (e) { r.avisoVideo = 'Resolução/fps não mudaram agora: ' + e.message; }
+        }
+        if (obsLocal.isObsRunning()) { config.obs.saidaPendente = q; r.pendente = true; }
+        else { try { obsLocal.writeOutputSettings(q); config.obs.saidaPendente = null; r.aplicado.push('taxa de bits e codificador'); } catch (e) { r.erro = e.message; } }
+        writeJson(CONFIG_PATH, config);
+        resultado = r;
+      }
+      let video = null; if (obs.connected) { try { video = await obs.call('GetVideoSettings'); } catch { /* ignorar */ } }
+      return sendJson(res, { perfil: obsLocal.readOutputSettings(), video, pendente: config.obs.saidaPendente, hardware: obsLocal.hardwareEncoders(), gpus: obsLocal.detectGpus(), running: obsLocal.isObsRunning(), connected: obs.connected, resultado });
     }
     send(res, 404, 'API não encontrada');
   } catch (e) {
@@ -543,6 +572,25 @@ class ObsClient {
 }
 const obs = new ObsClient();
 obs.connect();
+
+/** Abre o OBS do jeito configurado (escondido na bandeja ou com janela), aplicando antes a qualidade pendente. */
+function abrirObs() {
+  const ws = obsLocal.readWebsocketConfig();
+  if (!obsLocal.isObsRunning() && !(ws && ws.enabled && ws.password)) obsLocal.ensureWebsocketEnabled();
+  if (!obsLocal.isObsRunning() && config.obs.saidaPendente) {
+    try { obsLocal.writeOutputSettings(config.obs.saidaPendente); config.obs.saidaPendente = null; writeJson(CONFIG_PATH, config); console.log('[obs] qualidade pendente aplicada no perfil'); }
+    catch (e) { console.warn('[obs] qualidade pendente não aplicada:', e.message); }
+  }
+  const r = obsLocal.launchObs({ invisivel: config.obs.invisivel !== false });
+  for (const t of [4000, 8000, 15000, 30000]) setTimeout(() => { if (!obs.connected) obs.reconnect(); }, t);
+  return r;
+}
+// Abre o OBS junto com o programa (o operador nunca precisa ver a janela do OBS)
+setTimeout(() => {
+  try {
+    if (config.obs.autoAbrir !== false && obsLocal.findObsExe() && !obsLocal.isObsRunning()) { abrirObs(); console.log('[obs] aberto automaticamente' + (config.obs.invisivel !== false ? ' (escondido na bandeja)' : '')); }
+  } catch (e) { console.warn('[obs] não abriu sozinho:', e.message); }
+}, 1500);
 
 // ---------------------------------------------------------------- multidestino
 const { Relay } = require('./relay');

@@ -57,6 +57,7 @@
       <button data-tab="roteiro" class="active">📋 Roteiro</button>
       <button data-tab="legendas">🔤 Legendas</button>
       <button data-tab="cameras">📱 Câmeras</button>
+      <button data-tab="fontes">🎥 Fontes</button>
       <button data-tab="audio">🎚️ Áudio</button>
       <button data-tab="destinos">📡 Destinos</button>
       <button data-tab="holyrics">🎵 Holyrics</button>
@@ -180,6 +181,30 @@
       </div>
     </div>
 
+    <!-- Fontes (webcams, microfones) -->
+    <div class="tab" id="tab-fontes">
+      <div class="card">
+        <div class="row between"><h2 style="margin:0">Webcams, microfones e outras fontes</h2><button id="ftRefresh" class="ghost small">↻ Atualizar</button></div>
+        <p class="muted" style="margin-top:0">Tudo o que entra na transmissão, sem abrir o OBS. Cada webcam vira uma cena com o mesmo nome.</p>
+        <div id="ftList" class="fontes"><p class="muted">Conecte o OBS para ver as fontes.</p></div>
+      </div>
+      <div class="card">
+        <h2>Adicionar</h2>
+        <div class="grid2">
+          <div class="field"><label>Nome (ex.: Webcam púlpito)</label><input id="ftNome" placeholder="Webcam púlpito"></div>
+          <div class="field"><label>Tipo</label>
+            <select id="ftTipo">
+              <option value="dshow_input">Webcam / placa de captura</option>
+              <option value="wasapi_input_capture">Microfone / mesa de som (entra em todas as cenas)</option>
+              <option value="monitor_capture">Tela deste computador</option>
+            </select>
+          </div>
+        </div>
+        <button id="ftAdd" class="primary">+ Adicionar</button>
+        <span id="ftMsg" class="muted"></span>
+      </div>
+    </div>
+
     <!-- Áudio -->
     <div class="tab" id="tab-audio">
       <div class="card">
@@ -295,6 +320,11 @@
             <button id="obsEnableWs" class="small" hidden>Habilitar WebSocket do OBS</button>
           </div>
         </div>
+        <div class="row" style="gap:16px;flex-wrap:wrap;margin:10px 0">
+          <label class="switch"><input type="checkbox" id="cfgObsInvisivel"> Abrir o OBS escondido (só na bandeja)</label>
+          <label class="switch"><input type="checkbox" id="cfgObsAuto"> Abrir o OBS junto com este programa</label>
+          <button id="obsClose" class="small ghost" hidden>Fechar OBS</button>
+        </div>
         <details style="margin:10px 0">
           <summary class="muted">Configurar manualmente</summary>
           <p class="muted">No OBS: Ferramentas → Configurações do servidor WebSocket → marque "Habilitar servidor WebSocket" e copie a senha. Deixe a senha em branco para usar a que o OBS já gerou.</p>
@@ -306,6 +336,26 @@
         <button id="cfgSaveObs" class="primary">Salvar e reconectar</button>
         <span id="cfgObsMsg" class="muted"></span>
         </details>
+      </div>
+      <div class="card">
+        <h2>Qualidade da transmissão</h2>
+        <p class="muted" style="margin-top:0" id="qdAtual">Lendo o perfil do OBS…</p>
+        <div class="row" style="gap:8px;flex-wrap:wrap">
+          <button class="small" data-preset="leve">PC fraco · 720p 30 fps · 2500 kbps</button>
+          <button class="small" data-preset="padrao">Padrão · 1080p 30 fps · 4500 kbps</button>
+          <button class="small" data-preset="alta">Alta · 1080p 60 fps · 6000 kbps</button>
+        </div>
+        <div class="grid2" style="margin-top:8px">
+          <div class="field"><label>Resolução</label><select id="qdRes"><option value="1280x720">1280×720</option><option value="1920x1080">1920×1080</option></select></div>
+          <div class="field"><label>Quadros por segundo</label><select id="qdFps"><option value="30">30</option><option value="25">25</option><option value="60">60</option></select></div>
+          <div class="field"><label>Taxa de bits (kbps)</label><input id="qdBitrate" type="number" min="500" max="20000" step="100" value="3000"></div>
+          <div class="field"><label>Codificador</label><select id="qdEnc"><option value="x264">Processador (x264)</option></select></div>
+        </div>
+        <div class="row" style="gap:8px;flex-wrap:wrap">
+          <button id="qdAplicar" class="primary">Aplicar</button>
+          <button id="qdReiniciar" class="small" hidden>Reiniciar o OBS para valer</button>
+        </div>
+        <p class="muted" id="qdMsg" style="margin-bottom:0"></p>
       </div>
       <div class="card">
         <h2>Nomes das câmeras</h2>

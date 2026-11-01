@@ -92,7 +92,7 @@
       case 'RecordStateChanged': S.recording = d.outputActive; renderRecord(); break;
       case 'InputMuteStateChanged': { const i = S.audioInputs.find((x) => x.name === d.inputName); if (i) { i.muted = d.inputMuted; renderAudio(); } break; }
       case 'InputVolumeChanged': { const i = S.audioInputs.find((x) => x.name === d.inputName); if (i) { i.db = d.inputVolumeDb; renderAudio(); } break; }
-      case 'InputCreated': case 'InputRemoved': case 'InputNameChanged': refreshAudio(); break;
+      case 'InputCreated': case 'InputRemoved': case 'InputNameChanged': refreshAudio(); if ($('#tab-fontes').classList.contains('active')) refreshFontes(); break;
       default: break;
     }
   }
@@ -441,6 +441,7 @@
   function renderConfig() {
     const c = S.config; if (!c) return;
     $('#cfgHost').value = c.obs.host; $('#cfgPort').value = c.obs.port;
+    $('#cfgObsInvisivel').checked = c.obs.invisivel !== false; $('#cfgObsAuto').checked = c.obs.autoAbrir !== false;
     $('#cfgPwdHint').textContent = c.obs.hasPassword ? '(já salva)' : '(nenhuma)';
     $('#cfgCams').value = (c.cameraNames || []).join('\n');
   }
@@ -685,6 +686,7 @@
     const msg = $('#obsLocalMsg'), launch = $('#obsLaunch'), enable = $('#obsEnableWs');
     launch.hidden = true; enable.hidden = true;
     if (!st.installed) { msg.innerHTML = 'OBS Studio <b>não encontrado</b> neste computador. Instale em obsproject.com e reinicie este programa.'; return; }
+    $('#obsClose').hidden = !st.running;
     if (st.connected) { msg.innerHTML = 'OBS aberto e <b>conectado</b>' + (st.usingDetectedPassword ? ' (senha lida do próprio OBS).' : '.'); return; }
     if (!st.running) { msg.textContent = 'OBS instalado, mas fechado.'; launch.hidden = false; return; }
     if (!st.websocket || !st.websocket.enabled) { msg.textContent = 'OBS aberto, mas o servidor WebSocket está desligado.'; enable.hidden = false; return; }
@@ -716,6 +718,134 @@
     await fetch('/api/config', { method: 'PUT', body: JSON.stringify(body) });
     $('#cfgPassword').value = ''; $('#cfgObsMsg').textContent = 'Reconectando…';
   });
+  for (const [id, key] of [['#cfgObsInvisivel', 'invisivel'], ['#cfgObsAuto', 'autoAbrir']]) $(id).addEventListener('change', () => fetch('/api/config', { method: 'PUT', body: JSON.stringify({ obs: { [key]: $(id).checked } }) }));
+  $('#obsClose').addEventListener('click', async () => {
+    if (!confirm('Fechar o OBS? As câmeras param de entrar na transmissão até abrir de novo.')) return;
+    try { const r = await (await fetch('/api/obs/fechar', { method: 'POST' })).json(); if (r.error) throw new Error(r.error); toast(r.closed ? 'OBS fechado' : 'O OBS não fechou; feche pela bandeja do Windows.', !r.closed); }
+    catch (e) { toast(e.message, true); }
+    setTimeout(refreshObsLocal, 1500);
+  });
+
+  // ---- Qualidade da transmissão
+  const QD_PRESETS = { leve: { largura: 1280, altura: 720, fps: 30, bitrate: 2500, encoder: 'x264' }, padrao: { largura: 1920, altura: 1080, fps: 30, bitrate: 4500, encoder: 'hw' }, alta: { largura: 1920, altura: 1080, fps: 60, bitrate: 6000, encoder: 'hw' } };
+  const QD_NOMES = { nvenc: 'Placa NVIDIA (NVENC)', qsv: 'Intel QuickSync', amd: 'Placa AMD' };
+  let qd = null;
+  async function refreshSaida() {
+    try { qd = await (await fetch('/api/obs/saida')).json(); } catch { return; }
+    const enc = $('#qdEnc'); const cur = enc.value; enc.innerHTML = '<option value="x264">Processador (x264)</option>';
+    for (const h of qd.hardware || []) enc.append(el('option', { value: h, text: QD_NOMES[h] || h }));
+    if ([...enc.options].some((o) => o.value === cur)) enc.value = cur;
+    const p = qd.perfil, v = qd.video;
+    const partes = [];
+    if (v) partes.push(`saída ${v.outputWidth}×${v.outputHeight} a ${Math.round(v.fpsNumerator / (v.fpsDenominator || 1))} fps`);
+    else if (p && p.largura) partes.push(`saída ${p.largura}×${p.altura} a ${p.fps} fps`);
+    if (p && p.bitrate) partes.push(`${p.bitrate} kbps`);
+    if (p && p.encoder) partes.push(p.encoderNome);
+    $('#qdAtual').textContent = partes.length ? 'Agora: ' + partes.join(' · ') + (p && p.modo === 'Advanced' ? ' (modo avançado no OBS; "Aplicar" muda para o modo simples)' : '') : (qd.perfil ? 'Perfil do OBS sem qualidade definida ainda.' : 'OBS ainda não tem perfil neste computador (abre uma vez para criar).');
+    $('#qdReiniciar').hidden = !(qd.pendente && qd.running);
+    if (qd.pendente && qd.running) $('#qdMsg').textContent = 'Taxa de bits e codificador novos esperam o OBS reiniciar.';
+  }
+  for (const b of $$('#tab-config [data-preset]')) b.addEventListener('click', () => {
+    const p = QD_PRESETS[b.dataset.preset]; $('#qdRes').value = p.largura + 'x' + p.altura; $('#qdFps').value = String(p.fps); $('#qdBitrate').value = p.bitrate;
+    $('#qdEnc').value = p.encoder === 'hw' ? ((qd && qd.hardware && qd.hardware[0]) || 'x264') : p.encoder;
+  });
+  $('#qdAplicar').addEventListener('click', async () => {
+    const [largura, altura] = $('#qdRes').value.split('x').map(Number);
+    const body = { largura, altura, fps: Number($('#qdFps').value), bitrate: Number($('#qdBitrate').value), encoder: $('#qdEnc').value };
+    $('#qdMsg').textContent = 'Aplicando…';
+    try {
+      const r = await (await fetch('/api/obs/saida', { method: 'PUT', body: JSON.stringify(body) })).json();
+      // o PUT devolve o estado novo; a resposta do que foi aplicado vem junto no GET seguinte
+      await refreshSaida();
+      const x = r.resultado || {};
+      $('#qdMsg').textContent = x.pendente ? 'Resolução e fps já valem. Taxa de bits e codificador valem quando o OBS reiniciar (botão ao lado).' : (x.erro ? 'Erro: ' + x.erro : 'Qualidade aplicada: ' + (x.aplicado || []).join(' + ') + (x.avisoVideo ? '. ' + x.avisoVideo : '.'));
+    } catch (e) { $('#qdMsg').textContent = 'Erro: ' + e.message; }
+  });
+  $('#qdReiniciar').addEventListener('click', async () => {
+    $('#qdMsg').textContent = 'Reiniciando o OBS…';
+    try { const r = await (await fetch('/api/obs/reiniciar', { method: 'POST' })).json(); if (r.error) throw new Error(r.error); $('#qdMsg').textContent = 'OBS reiniciado com a qualidade nova. Conectando…'; }
+    catch (e) { $('#qdMsg').textContent = 'Erro: ' + e.message; }
+    setTimeout(refreshSaida, 8000);
+  });
+
+  // ---- Fontes (webcams, microfones): o operador não precisa abrir o OBS
+  const FT_TIPOS = { dshow_input: ['📷', 'Webcam', 'video_device_id'], wasapi_input_capture: ['🎤', 'Microfone', 'device_id'], wasapi_output_capture: ['🔊', 'Som do PC', 'device_id'], browser_source: ['🌐', 'Página', null], monitor_capture: ['🖥️', 'Tela', 'monitor_id'], ffmpeg_source: ['🎞️', 'Vídeo', null], image_source: ['🖼️', 'Imagem', null], color_source: ['🎨', 'Cor', null], text_gdiplus: ['🔤', 'Texto', null], text_gdiplus_v2: ['🔤', 'Texto', null], text_gdiplus_v3: ['🔤', 'Texto', null] };
+  async function refreshFontes() {
+    const box = $('#ftList');
+    if (!S.obs) { box.innerHTML = '<p class="muted">Conecte o OBS para ver as fontes.</p>'; return; }
+    try {
+      const inputs = (await obs('GetInputList')).inputs;
+      const scenes = S.scenes.length ? S.scenes : (await obs('GetSceneList')).scenes.map((x) => x.sceneName);
+      const em = {}; // input -> cenas
+      const lists = await obsBatch(scenes.map((sceneName) => ({ request: 'GetSceneItemList', data: { sceneName } })));
+      lists.forEach((r, i) => { if (r.ok) for (const it of r.data.sceneItems) (em[it.sourceName] = em[it.sourceName] || []).push(scenes[i]); });
+      box.innerHTML = '';
+      if (!inputs.length) box.innerHTML = '<p class="muted">Nenhuma fonte ainda. Adicione uma webcam abaixo.</p>';
+      for (const inp of inputs) {
+        const [icone, tipo, prop] = FT_TIPOS[inp.inputKind] || ['▫️', inp.inputKind, null];
+        const row = el('div', { class: 'fonte' }, [
+          el('div', { class: 'ft-head' }, [el('span', { class: 'ft-icone', text: icone }), el('b', { text: inp.inputName }), el('span', { class: 'muted', text: tipo + ((em[inp.inputName] || []).length ? ' · em: ' + em[inp.inputName].join(', ') : ' · em nenhuma cena') })]),
+        ]);
+        const acts = el('div', { class: 'row', style: 'gap:8px;flex-wrap:wrap' });
+        if (prop) {
+          const sel = el('select', { class: 'small' }, [el('option', { value: '', text: 'Carregando dispositivos…' })]);
+          acts.append(sel);
+          (async () => {
+            try {
+              const [items, cur] = await Promise.all([obs('GetInputPropertiesListPropertyItems', { inputName: inp.inputName, propertyName: prop }), obs('GetInputSettings', { inputName: inp.inputName })]);
+              sel.innerHTML = '';
+              sel.append(el('option', { value: '', text: '— escolher dispositivo —' }));
+              for (const it of items.propertyItems) sel.append(el('option', { value: String(it.itemValue), text: it.itemName + (it.itemEnabled === false ? ' (indisponível)' : '') }));
+              const v = cur.inputSettings[prop]; if (v !== undefined && [...sel.options].some((o) => o.value === String(v))) sel.value = String(v);
+              sel.addEventListener('change', async () => { try { await obs('SetInputSettings', { inputName: inp.inputName, inputSettings: { [prop]: isNaN(sel.value) || sel.value === '' ? sel.value : Number(sel.value) }, overlay: true }); toast('Dispositivo trocado'); } catch (e) { toast(e.message, true); } });
+            } catch { sel.innerHTML = '<option value="">(sem lista de dispositivos)</option>'; }
+          })();
+        }
+        if (/wasapi|audio/.test(inp.inputKind)) {
+          const mute = el('button', { class: 'small', text: '🔇 Mudo' , onclick: async () => { try { const m = await obs('GetInputMute', { inputName: inp.inputName }); await obs('SetInputMute', { inputName: inp.inputName, inputMuted: !m.inputMuted }); toast(!m.inputMuted ? 'No mudo' : 'Som ligado'); } catch (e) { toast(e.message, true); } } });
+          acts.append(mute);
+        }
+        if (inp.inputName !== 'Overlay (legendas)') acts.append(el('button', { class: 'small danger ghost', text: 'Remover', onclick: async () => {
+          if (!confirm(`Remover "${inp.inputName}" do OBS?`)) return;
+          try { await obs('RemoveInput', { inputName: inp.inputName }); toast('Removida'); setTimeout(refreshFontes, 500); } catch (e) { toast(e.message, true); }
+        } }));
+        row.append(acts); box.append(row);
+      }
+    } catch (e) { box.innerHTML = '<p class="muted">Não consegui listar: ' + e.message + '</p>'; }
+  }
+  $('#ftRefresh').addEventListener('click', refreshFontes);
+  $('#ftAdd').addEventListener('click', async () => {
+    if (!S.obs) return toast('Conecte o OBS primeiro', true);
+    const nome = $('#ftNome').value.trim(); const kind = $('#ftTipo').value; const msg = $('#ftMsg');
+    if (!nome) return toast('Dê um nome à fonte', true);
+    msg.textContent = 'Criando…';
+    try {
+      const scenes = (await obs('GetSceneList')).scenes.map((x) => x.sceneName);
+      const inputs = (await obs('GetInputList')).inputs.map((i) => i.inputName);
+      if (inputs.includes(nome) || scenes.includes(nome)) throw new Error('Já existe uma fonte ou cena com esse nome');
+      const W = (S.info && S.info.viewWidth) || 1920, H = (S.info && S.info.viewHeight) || 1080;
+      if (kind === 'wasapi_input_capture') {
+        // microfone: entra em todas as cenas (menos Overlay), para o som não depender da cena
+        const alvo = scenes.filter((n) => n !== 'Overlay');
+        if (!alvo.length) throw new Error('Crie uma cena ou webcam antes do microfone');
+        await obs('CreateInput', { sceneName: alvo[0], inputName: nome, inputKind: kind, inputSettings: {} });
+        for (const sc of alvo.slice(1)) await obs('CreateSceneItem', { sceneName: sc, sourceName: nome });
+        msg.textContent = 'Microfone criado em ' + alvo.length + ' cena(s). Escolha o dispositivo na lista acima.';
+      } else {
+        // webcam/tela: cena própria com o mesmo nome, overlay por cima e microfones existentes
+        await obs('CreateScene', { sceneName: nome });
+        const r = await obs('CreateInput', { sceneName: nome, inputName: nome, inputKind: kind, inputSettings: kind === 'monitor_capture' ? { monitor_id: 0 } : {} });
+        try { await obs('SetSceneItemTransform', { sceneName: nome, sceneItemId: r.sceneItemId, sceneItemTransform: { positionX: 0, positionY: 0, boundsType: 'OBS_BOUNDS_SCALE_INNER', boundsAlignment: 0, boundsWidth: W, boundsHeight: H } }); } catch { /* ignorar */ }
+        const all = (await obs('GetInputList')).inputs;
+        for (const i of all) if (i.inputKind === 'wasapi_input_capture') { try { await obs('CreateSceneItem', { sceneName: nome, sourceName: i.inputName }); } catch { /* ignorar */ } }
+        if (scenes.includes('Overlay')) { try { await obs('CreateSceneItem', { sceneName: nome, sourceName: 'Overlay' }); } catch { /* ignorar */ } }
+        msg.textContent = `Cena "${nome}" criada. Escolha o dispositivo na lista acima.`;
+      }
+      $('#ftNome').value = '';
+      setTimeout(refreshFontes, 600);
+    } catch (e) { msg.textContent = ''; toast('Não criou: ' + e.message, true); }
+  });
+
   $('#cfgSaveCams').addEventListener('click', async () => {
     await fetch('/api/config', { method: 'PUT', body: JSON.stringify({ cameraNames: $('#cfgCams').value.split('\n').map((s) => s.trim()).filter(Boolean) }) });
     toast('Nomes salvos'); loadInfo();
@@ -727,6 +857,8 @@
     for (const x of $$('.tabs button')) x.classList.toggle('active', x === b);
     for (const t of $$('.tab')) t.classList.toggle('active', t.id === 'tab-' + b.dataset.tab);
     if (b.dataset.tab === 'audio') refreshAudio();
+    if (b.dataset.tab === 'fontes') refreshFontes();
+    if (b.dataset.tab === 'config') refreshSaida();
   });
   function setBadge(elm, cls, label) { elm.className = 'badge ' + cls; elm.innerHTML = `<span class="dot ${cls}"></span>${label}`; }
   let toastTimer;

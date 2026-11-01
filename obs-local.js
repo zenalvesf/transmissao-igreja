@@ -69,14 +69,90 @@ function isObsRunning() {
   } catch { return false; }
 }
 
-function launchObs() {
+/** Abre o OBS. invisivel: só na bandeja, sem janela (o motor roda escondido e a mesa é a interface). */
+function launchObs(opts) {
   const exe = findObsExe();
   if (!exe) throw new Error('OBS não encontrado. Instale o OBS Studio em https://obsproject.com');
   if (isObsRunning()) return { started: false, exe };
+  const args = ['--disable-shutdown-check', '--disable-updater'];
+  if (opts && opts.invisivel) args.push('--minimize-to-tray');
   // O OBS exige ser iniciado a partir da própria pasta bin/64bit
-  const child = spawn(exe, [], { cwd: path.dirname(exe), detached: true, stdio: 'ignore', windowsHide: false });
+  const child = spawn(exe, args, { cwd: path.dirname(exe), detached: true, stdio: 'ignore', windowsHide: false });
   child.unref();
-  return { started: true, exe };
+  return { started: true, exe, args };
+}
+
+/** Pede ao OBS para fechar (como clicar no X). Devolve uma promessa que resolve quando ele sumiu (ou após 15 s). */
+function closeObs() {
+  if (!isObsRunning()) return Promise.resolve({ closed: true, wasRunning: false });
+  try { execFileSync('taskkill', ['/IM', 'obs64.exe'], QUIET); } catch { /* pode já ter fechado */ }
+  return new Promise((resolve) => {
+    const t0 = Date.now();
+    const tick = () => { if (!isObsRunning()) return resolve({ closed: true, wasRunning: true }); if (Date.now() - t0 > 15000) return resolve({ closed: false, wasRunning: true }); setTimeout(tick, 500); };
+    setTimeout(tick, 800);
+  });
+}
+
+// ---- Placa de vídeo: para sugerir o codificador por hardware que existe de verdade
+let gpuCache = null;
+function detectGpus() {
+  if (gpuCache) return gpuCache;
+  try {
+    const out = execFileSync('powershell', ['-NoProfile', '-Command', '(Get-CimInstance Win32_VideoController).Name'], Object.assign({ timeout: 8000 }, QUIET));
+    gpuCache = out.split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
+  } catch { gpuCache = []; }
+  return gpuCache;
+}
+/** Codificadores por hardware prováveis nesta máquina: nvenc | qsv | amd (pela placa de vídeo). */
+function hardwareEncoders() {
+  const g = detectGpus().join(' ');
+  const out = [];
+  if (/nvidia|geforce|quadro|rtx|gtx/i.test(g)) out.push('nvenc');
+  if (/intel/i.test(g)) out.push('qsv');
+  if (/amd|radeon/i.test(g)) out.push('amd');
+  return out;
+}
+
+// ---- Qualidade da transmissão no perfil do OBS (basic.ini)
+const ENCODER_INI = { x264: 'x264', nvenc: 'jim_nvenc', qsv: 'qsv', amd: 'amd' };
+const ENCODER_NOME = { x264: 'processador (x264)', jim_nvenc: 'placa NVIDIA (NVENC)', nvenc: 'placa NVIDIA (NVENC)', ffmpeg_nvenc: 'placa NVIDIA (NVENC)', qsv: 'Intel QuickSync', amd: 'placa AMD', x264_lowcpu: 'processador (x264, uso baixo)' };
+
+/** Lê o que está no perfil: { file, bitrate, encoder, encoderNome, largura, altura, fps, baseLargura, baseAltura } ou null. */
+function readOutputSettings() {
+  const file = path.join(profileDir(), 'basic.ini');
+  let ini; try { ini = parseIni(fs.readFileSync(file, 'utf8')); } catch { return null; }
+  const adv = /advanced/i.test(iniGet(ini, 'Output', 'Mode') || 'Simple');
+  const enc = adv ? (iniGet(ini, 'AdvOut', 'Encoder') || '') : (iniGet(ini, 'SimpleOutput', 'StreamEncoder') || 'x264');
+  return {
+    file, modo: adv ? 'Advanced' : 'Simple',
+    bitrate: Number(adv ? '' : iniGet(ini, 'SimpleOutput', 'VBitrate')) || 0,
+    encoder: enc, encoderNome: ENCODER_NOME[enc] || enc,
+    baseLargura: Number(iniGet(ini, 'Video', 'BaseCX')) || 0, baseAltura: Number(iniGet(ini, 'Video', 'BaseCY')) || 0,
+    largura: Number(iniGet(ini, 'Video', 'OutputCX')) || 0, altura: Number(iniGet(ini, 'Video', 'OutputCY')) || 0,
+    fps: Number(iniGet(ini, 'Video', 'FPSCommon')) || 0,
+  };
+}
+
+/** Grava qualidade no perfil (OBS fechado): q = { largura, altura, fps, bitrate, encoder: x264|nvenc|qsv|amd }. */
+function writeOutputSettings(q) {
+  if (isObsRunning()) throw new Error('Feche o OBS primeiro: ele regrava as configurações ao fechar.');
+  const file = path.join(profileDir(), 'basic.ini');
+  let ini; try { ini = parseIni(fs.readFileSync(file, 'utf8')); } catch { ini = parseIni(''); }
+  iniSet(ini, 'Output', 'Mode', 'Simple');
+  if (q.bitrate) iniSet(ini, 'SimpleOutput', 'VBitrate', String(Math.max(500, Math.min(20000, Number(q.bitrate)))));
+  if (q.encoder && ENCODER_INI[q.encoder]) {
+    iniSet(ini, 'SimpleOutput', 'StreamEncoder', ENCODER_INI[q.encoder]);
+    if (q.encoder === 'x264') iniSet(ini, 'SimpleOutput', 'Preset', 'veryfast');
+  }
+  iniSet(ini, 'SimpleOutput', 'UseAdvanced', 'false');
+  if (!iniGet(ini, 'SimpleOutput', 'ABitrate')) iniSet(ini, 'SimpleOutput', 'ABitrate', '160');
+  iniSet(ini, 'Video', 'BaseCX', String(q.baseLargura || 1920)); iniSet(ini, 'Video', 'BaseCY', String(q.baseAltura || 1080));
+  if (q.largura && q.altura) { iniSet(ini, 'Video', 'OutputCX', String(q.largura)); iniSet(ini, 'Video', 'OutputCY', String(q.altura)); }
+  if (q.fps) { iniSet(ini, 'Video', 'FPSType', '0'); iniSet(ini, 'Video', 'FPSCommon', String(q.fps)); }
+  if (!iniGet(ini, 'Video', 'ScaleType')) iniSet(ini, 'Video', 'ScaleType', 'bicubic');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, iniToString(ini));
+  return { file };
 }
 
 // ---- Perfil do OBS (basic.ini): ativar o buffer de replay
@@ -100,7 +176,7 @@ function iniGet(ini, secao, chave) {
 }
 function iniSet(ini, secao, chave, valor) {
   let sec = ini.secoes.find((x) => x.nome === secao);
-  if (!sec) { sec = { nome: secao, linhas: [] }; ini.secoes.push(sec); }
+  if (!sec) { const last = ini.secoes[ini.secoes.length - 1]; if (last.linhas.length && last.linhas[last.linhas.length - 1].trim() !== '') last.linhas.push(''); sec = { nome: secao, linhas: [] }; ini.secoes.push(sec); }
   const i = sec.linhas.findIndex((l) => { const m = l.match(/^\s*([^=;#]+?)\s*=/); return m && m[1] === chave; });
   if (i >= 0) sec.linhas[i] = chave + '=' + valor;
   else { let j = sec.linhas.length; while (j > 0 && sec.linhas[j - 1].trim() === '') j--; sec.linhas.splice(j, 0, chave + '=' + valor); }
@@ -155,4 +231,4 @@ function status() {
   };
 }
 
-module.exports = { readWebsocketConfig, detectedPassword, ensureWebsocketEnabled, findObsExe, isObsRunning, launchObs, status, WS_CONFIG, readReplaySettings, enableReplayBuffer, parseIni, iniGet, iniSet, iniToString };
+module.exports = { readWebsocketConfig, detectedPassword, ensureWebsocketEnabled, findObsExe, isObsRunning, launchObs, closeObs, status, WS_CONFIG, readReplaySettings, enableReplayBuffer, readOutputSettings, writeOutputSettings, ENCODER_NOME, detectGpus, hardwareEncoders, parseIni, iniGet, iniSet, iniToString };

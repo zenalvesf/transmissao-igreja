@@ -54,7 +54,7 @@ Para publicar uma versão: aumente `version` em `package.json`, rode `npm run di
 
 ## No dia do culto
 
-1. Abra o **Transmissao Igreja** (atalho na área de trabalho) ou, no modo manual, o `iniciar.bat`. Abra o OBS pela aba Config, se ainda não estiver aberto.
+1. Abra o **Transmissao Igreja** (atalho na área de trabalho) ou, no modo manual, o `iniciar.bat`. O OBS abre sozinho, escondido na bandeja do Windows: ninguém precisa mexer nele.
 2. **Celulares:** leia o QR code da página inicial (ou da aba Câmeras da mesa). O navegador vai avisar que o certificado não é confiável: toque em **Avançado → Continuar** (no iPhone: **Mostrar detalhes → Visitar este site**). Isso acontece só na primeira vez em cada aparelho. Escolha o nome da câmera, confira a qualidade e toque em **Iniciar câmera**. Deixe o celular no tripé carregando; a tela fica ligada sozinha.
 3. **Destinos:** se usar YouTube + Instagram, confira na aba Destinos se os dois estão ligados e com a chave do dia (a do Instagram muda a cada live).
 4. **Holyrics:** na aba Holyrics, confira se está "conectado" e se **Mostrar a letra na live** está ligado. A letra do telão entra sozinha na transmissão.
@@ -103,6 +103,15 @@ O Holyrics roda em outro PC, só para o telão. O programa lê pela rede o slide
 - **Aparência:** embaixo ou em cima, três tamanhos, faixa de ponta a ponta / caixa / só sombra, maiúsculas e nome da música. Quando a legenda inferior (nome do pregador) está na tela, a letra sobe um pouco para não cobrir.
 - **Versículos:** a API do Holyrics não entrega o texto do versículo, só a referência. Para versículo na live, use o **Versículo** da aba Legendas (ou aponte uma câmera para o telão).
 - Os dois PCs precisam estar na mesma rede. O programa consulta o Holyrics várias vezes por segundo, mas só baixa dados quando o slide muda.
+
+## O OBS fica escondido: a mesa é a interface
+
+Desde a versão 1.5 o OBS é só o motor. O programa abre o OBS junto, minimizado na bandeja, e tudo o que o operador precisa está na mesa:
+
+- **Aba Fontes:** lista as webcams, microfones e outras fontes do OBS; troca o dispositivo de cada uma (qual webcam, qual entrada de som) e remove. **Adicionar** cria uma webcam, placa de captura ou captura de tela como uma cena nova com o mesmo nome, já com o overlay e os microfones; um microfone novo entra em todas as cenas.
+- **Config → Qualidade da transmissão:** três predefinições (PC fraco 720p, padrão 1080p, alta 1080p60) ou valores próprios. Resolução e fps valem na hora; taxa de bits e codificador valem quando o OBS reinicia (botão **Reiniciar o OBS para valer**). O codificador por placa de vídeo só aparece se a placa existir (NVIDIA, Intel ou AMD).
+- **Config → Conexão com o OBS:** "Abrir o OBS escondido" e "Abrir o OBS junto com este programa" podem ser desligados para quem prefere ver a janela do OBS. **Fechar OBS** fecha com cuidado (recusa se estiver transmitindo).
+- Para abrir a janela do OBS quando precisar de algo que a mesa ainda não faz: ícone do OBS na bandeja do Windows → Mostrar.
 
 ## Replay instantâneo
 
@@ -156,6 +165,7 @@ transmissao-igreja/
 ## Problemas comuns
 
 - **O celular diz que precisa de https.** Use o QR code, que já aponta para o endereço https. Se o IP do PC mudou, feche e abra o `iniciar.bat` de novo e apague a pasta `certs` para gerar um certificado com o IP novo.
+- **O OBS abriu com uma janela de "assistente de configuração automática".** Acontece só na primeira abertura do OBS num PC novo. Clique em Cancelar; depois use a qualidade da mesa.
 - **"Salvar replay" falha.** O buffer precisa estar ligado (selo verde "buffer ligado" na aba Replay). Se o OBS não tem o buffer de replay ativado nas configurações, use o botão **Ativar o replay no OBS** com o OBS fechado.
 - **O Holyrics fica em "erro" na mesa.** A mensagem ao lado diz o motivo: "não aceitou a conexão" é API Server desligado ou IP errado; "token inválido" é token digitado errado ou sem a permissão GetCurrentPresentation; "tempo esgotado" costuma ser firewall no PC do Holyrics ou os PCs em redes diferentes.
 - **O OBS fica vermelho na mesa.** Na aba Config veja o que ela diz sobre o OBS: se estiver fechado, use **Abrir OBS**; se o WebSocket estiver desligado, **Habilitar WebSocket do OBS** e reabra o OBS. Se mudou a senha no OBS, salve-a em "Configurar manualmente".

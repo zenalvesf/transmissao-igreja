@@ -150,3 +150,11 @@ select.small, button.small { min-height: 36px; padding: 6px 10px; width: auto; f
 button.primary .muted, button.ok .muted { color: rgba(255,255,255,.8); }
 #rpStatus.live { background: var(--live); border-color: var(--live); color: #fff; font-weight: 700; animation: pulse 1.6s infinite; }
 #top .actions a.btn { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; color: inherit; min-width: 0; padding: 0 14px; min-height: 48px; background: transparent; border: 1px solid var(--line); border-radius: var(--radius); }
+
+/* ---- Fontes ---- */
+.fontes { display: flex; flex-direction: column; gap: 8px; }
+.fonte { padding: 10px 12px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; display: flex; flex-direction: column; gap: 8px; }
+.fonte .ft-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.fonte .ft-icone { font-size: 18px; }
+.fonte select.small { max-width: 100%; flex: 1; }
+button.danger.ghost { background: transparent; color: var(--danger); border-color: var(--danger); }

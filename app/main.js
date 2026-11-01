@@ -90,7 +90,7 @@ function buildTray() {
       { label: 'Abrir mesa de produção', click: showWindow },
       { label: 'Página com QR codes dos celulares', click: () => shell.openExternal(homeUrl()) },
       { type: 'separator' },
-      { label: 'Abrir OBS', click: () => { try { server.obsLocal.launchObs(); } catch (e) { dialog.showErrorBox('OBS', e.message); } } },
+      { label: 'Abrir OBS', click: () => { try { server.obsLocal.launchObs({ invisivel: server.config.obs.invisivel !== false }); } catch (e) { dialog.showErrorBox('OBS', e.message); } } },
       { label: 'Iniciar junto com o Windows', type: 'checkbox', checked: loginItem(), click: (item) => { app.setLoginItemSettings({ openAtLogin: item.checked, args: ['--hidden'] }); refresh(); } },
       { type: 'separator' },
       { label: 'Abrir pasta de dados (roteiro, log)', click: () => shell.openPath(userData) },
