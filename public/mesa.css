@@ -185,3 +185,12 @@ button.danger.ghost { background: transparent; color: var(--danger); border-colo
 .tr-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel-2); cursor: pointer; font-size: 13px; color: var(--text); }
 .tr-chip input { width: 16px; height: 16px; min-height: 0; padding: 0; margin: 0; accent-color: var(--ok); }
 .tr-chip:has(input:checked) { border-color: var(--accent); background: rgba(79,140,255,.12); }
+
+/* ---- Transições ---- */
+.ts-lista { display: flex; flex-wrap: wrap; gap: 6px; }
+.ts-op { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel-2); cursor: pointer; font-size: 14px; color: var(--text); }
+.ts-op .muted { font-size: 12px; }
+.ts-op input { width: 16px; height: 16px; min-height: 0; padding: 0; margin: 0; accent-color: var(--accent); }
+.ts-op:has(input:checked) { border-color: var(--accent); background: rgba(79,140,255,.12); }
+.rp-item.off { opacity: .5; }
+.rp-item.novo { border-color: var(--ok); }

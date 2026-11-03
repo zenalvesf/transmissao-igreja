@@ -128,6 +128,7 @@ const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8',
   '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json',
+  '.mp4': 'video/mp4', '.webm': 'video/webm', '.mov': 'video/quicktime', '.mkv': 'video/x-matroska', '.avi': 'video/x-msvideo',
 };
 
 function send(res, status, body, type) {
@@ -166,6 +167,7 @@ async function handleHttp(req, res) {
     } catch (e) { return send(res, 400, e.message); }
   }
 
+  if (p.startsWith('/estingers/')) return serveFile(res, path.join(DATA, 'estingers', path.basename(decodeURIComponent(p)))); // vídeos de estinger enviados pela mesa
   if (PAGES[p]) return serveFile(res, path.join(PUBLIC, PAGES[p]));
   if (p.startsWith('/view/')) return serveFile(res, path.join(PUBLIC, 'view.html'));
 
@@ -185,8 +187,33 @@ function publicConfig() {
   return safe;
 }
 
+const ESTINGER_EXT = ['.mp4', '.webm', '.mov', '.mkv', '.avi'];
+/** Recebe o vídeo de um estinger (corpo bruto, nome no cabeçalho x-nome) e guarda em data/estingers. */
+function receberEstinger(req, res) {
+  return new Promise((resolve) => {
+    let nomeOrig = 'estinger.mp4'; try { nomeOrig = decodeURIComponent(req.headers['x-nome'] || nomeOrig); } catch { /* nome inválido */ }
+    const ext = path.extname(nomeOrig).toLowerCase();
+    if (!ESTINGER_EXT.includes(ext)) { sendJson(res, { error: 'Use um vídeo .webm, .mp4, .mov, .mkv ou .avi' }, 400); req.resume(); return resolve(); }
+    if (Number(req.headers['content-length'] || 0) > 500e6) { sendJson(res, { error: 'Vídeo grande demais (máximo 500 MB)' }, 400); req.resume(); return resolve(); }
+    const nome = (path.basename(nomeOrig, ext).replace(/[^\w.\- ]+/g, '_').slice(0, 60) || 'estinger') + ext;
+    const dir = path.join(DATA, 'estingers'); fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, nome), out = fs.createWriteStream(file);
+    let bytes = 0;
+    req.on('data', (c) => { bytes += c.length; if (bytes > 500e6) req.destroy(new Error('grande demais')); });
+    req.on('error', () => { out.destroy(); try { fs.unlinkSync(file); } catch { /* nada */ } if (!res.headersSent) sendJson(res, { error: 'Envio interrompido' }, 400); resolve(); });
+    out.on('error', (e) => { if (!res.headersSent) sendJson(res, { error: e.message }, 500); resolve(); });
+    out.on('finish', () => { sendJson(res, { ok: true, nome, arquivo: file, url: '/estingers/' + encodeURIComponent(nome), bytes }); resolve(); });
+    req.pipe(out);
+  });
+}
+function listarEstingers() {
+  const dir = path.join(DATA, 'estingers');
+  try { return fs.readdirSync(dir).filter((f) => ESTINGER_EXT.includes(path.extname(f).toLowerCase())).map((f) => ({ nome: f, arquivo: path.join(dir, f), url: '/estingers/' + encodeURIComponent(f) })); } catch { return []; }
+}
+
 async function handleApi(req, res, p) {
   try {
+    if (p === '/api/transicoes/arquivo' && req.method === 'POST') return receberEstinger(req, res);
     if (p === '/api/info') {
       return sendJson(res, {
         ips: lanIps(), httpPort: config.httpPort, httpsPort: config.httpsPort,
@@ -324,6 +351,29 @@ async function handleApi(req, res, p) {
       const token = (typeof body.token === 'string' && body.token.trim()) ? body.token.trim() : config.holyrics.token;
       try { return sendJson(res, await Holyrics.testar({ host: String(body.host || config.holyrics.host).trim(), port: Number(body.port) || config.holyrics.port, token })); }
       catch (e) { return sendJson(res, { ok: false, erro: String(e.message || e) }); }
+    }
+    // Transições (estinger etc.) na coleção de cenas do OBS
+    if (p === '/api/transicoes' && req.method === 'GET') {
+      return sendJson(res, { colecao: obsLocal.readTransitions(), obsAberto: obsLocal.isObsRunning(), obsInstalado: !!obsLocal.findObsExe(), tipos: obsLocal.TRANSICAO_TIPOS, estingers: listarEstingers() });
+    }
+    if (p === '/api/transicoes' && req.method === 'PUT') {
+      const body = await readBody(req);
+      if (obs.connected) { try { if ((await obs.call('GetStreamStatus')).outputActive) return sendJson(res, { error: 'O OBS está transmitindo. Pare a transmissão antes de mudar as transições.' }, 400); } catch { /* segue */ } }
+      const estavaAberto = obsLocal.isObsRunning();
+      if (estavaAberto) { const c = await obsLocal.closeObs(); if (!c.closed) return sendJson(res, { error: 'O OBS não fechou. Feche pela bandeja do Windows e tente de novo.' }, 400); }
+      let colecao = null, erro = null;
+      try { colecao = obsLocal.writeTransitions(body); } catch (e) { erro = e.message; }
+      let reabriu = false;
+      if (estavaAberto || (config.obs.autoAbrir !== false && obsLocal.findObsExe())) { try { abrirObs(); reabriu = true; } catch (e) { console.warn('[transicoes] não reabriu o OBS:', e.message); } }
+      if (erro) return sendJson(res, { error: erro, reabriu }, 400);
+      console.log('[transicoes] coleção atualizada:', (body.adicionar || []).map((t) => t.nome).join(', ') || '-', 'removidas:', (body.remover || []).join(', ') || '-');
+      return sendJson(res, { ok: true, colecao, reabriu });
+    }
+    if (p === '/api/transicoes/estinger' && req.method === 'DELETE') {
+      const body = await readBody(req);
+      const f = listarEstingers().find((e) => e.nome === body.nome);
+      if (f) fs.unlinkSync(f.arquivo);
+      return sendJson(res, { ok: !!f, estingers: listarEstingers() });
     }
     // Tradução ao vivo
     if (p === '/api/traducao' && req.method === 'PUT') {

@@ -115,6 +115,14 @@ Desde a versão 1.5 o OBS é só o motor. O programa abre o OBS junto, minimizad
 - **Config → Conexão com o OBS:** "Abrir o OBS escondido" e "Abrir o OBS junto com este programa" podem ser desligados para quem prefere ver a janela do OBS. **Fechar OBS** fecha com cuidado (recusa se estiver transmitindo).
 - Para abrir a janela do OBS quando precisar de algo que a mesa ainda não faz: ícone do OBS na bandeja do Windows → Mostrar.
 
+## Transições e estinger
+
+- **Transição padrão:** no cartão Cenas (ao lado dos botões) e na aba **Transições**, escolha a transição e a duração em milissegundos. Vale na hora para botões, teclas e roteiro. **Shift + clique** numa cena (ou Shift + tecla 1 a 9) corta seco, sem transição.
+- **Transição por item do roteiro:** ao criar um item, escolha "Transição para esta cena" e a duração. Só aquele item usa essa transição; depois a padrão volta sozinha.
+- **Estinger:** aba Transições → **Nova transição** → tipo *Estinger*. Envie o vídeo (um .webm com fundo transparente fica por cima da imagem; um .mp4 cobre a tela inteira), defina o **ponto de troca** (o instante, em ms, em que o vídeo cobre tudo e o OBS troca a cena por baixo) e clique em **Adicionar à lista** → **Aplicar e reiniciar o OBS**. Os vídeos ficam na pasta `data/estingers`.
+- Também dá para criar **Esmaecer para uma cor**, **Deslizar** e **Varrer** do mesmo jeito. Corte e Esmaecer são do próprio OBS.
+- Como o OBS só aceita transições novas pelo arquivo da coleção de cenas, aplicar fecha o OBS, grava o arquivo (deixando uma cópia `.antes-da-mesa`) e reabre em uns 15 segundos. Não faça isso com a transmissão no ar: a mesa recusa.
+
 ## Tradução ao vivo (para quem não entende português)
 
 O que o pregador fala é reconhecido pelo navegador e traduzido na hora. Quem precisa lê (ou ouve pelo fone) no próprio celular, e o operador pode mostrar a tradução como legenda na transmissão.
@@ -183,6 +191,7 @@ transmissao-igreja/
 | `http://localhost:8080/view/NOME` | fonte do OBS. Opções: `?fit=contain` (sem cortar), `?audio=1` (com áudio do celular), `?nosignal=black` (tela preta quando cai; o padrão congela o último quadro), `?debug=1` (mostra estatísticas) |
 | `http://localhost:8080/overlay` | overlay de legendas. Opções: `?accent=ff9900` (cor da igreja), `?font=Georgia` |
 | `http://localhost:8080/multiview` | multiview: programa + cenas ao vivo, clique para cortar |
+| `http://localhost:8080/estingers/NOME` | vídeos de estinger enviados pela mesa |
 | `http://localhost:8080/ouvir` | ouvinte da tradução: escuta o microfone (Edge ou Chrome). `?auto` começa a ouvir sozinho |
 | `https://IP:8443/traducao` | tradução ao vivo no celular de quem não entende português |
 
@@ -190,6 +199,8 @@ transmissao-igreja/
 
 - **O celular diz que precisa de https.** Use o QR code, que já aponta para o endereço https. Se o IP do PC mudou, feche e abra o `iniciar.bat` de novo e apague a pasta `certs` para gerar um certificado com o IP novo.
 - **O OBS abriu com uma janela de "assistente de configuração automática".** Acontece só na primeira abertura do OBS num PC novo. Clique em Cancelar; depois use a qualidade da mesa.
+- **A transição nova não aparece depois de aplicar.** O OBS precisa fechar e abrir de novo; se ele não fechou (a mesa avisa), feche pelo ícone da bandeja do Windows e abra pela mesa. Se a coleção de cenas em uso no OBS for outra, a mesa mostra o nome da coleção no cartão "Transições na coleção do OBS".
+- **O estinger não fica transparente.** Só vídeos .webm (VP9 ou VP8 com canal alfa) ou .mov com alfa têm transparência; .mp4 sempre cobre a tela inteira, o que também funciona como transição.
 - **O ouvinte diz "navegador sem reconhecimento de voz".** Abra `http://localhost:8080/ouvir` no Microsoft Edge ou no Google Chrome (o botão da mesa tenta o Edge, depois o Chrome). Firefox e a janela do próprio programa não têm esse recurso.
 - **O ouvinte reconhece, mas nada é traduzido.** Na aba Tradução, o contador mostra as falhas e o motivo (chave inválida, sem créditos, sem internet). Use **Testar tradução** para confirmar o serviço. A tradução só acontece com **Tradução ligada**.
 - **O celular do membro não abre a página de tradução.** Mesmo caso das câmeras: precisa estar no Wi‑Fi da igreja e aceitar o aviso do certificado na primeira vez.

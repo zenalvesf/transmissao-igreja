@@ -5,7 +5,8 @@
 
   // ------------------------------------------------------------ estado
   const S = {
-    obs: false, scenes: [], program: '', transitions: [], transition: '',
+    obs: false, scenes: [], program: '', transitions: [], transition: '', transitionsFull: [], transitionDur: 300, transitionFixed: false,
+    tsInfo: null, tsPend: { adicionar: [], remover: [] }, // transições na coleção do OBS e mudanças ainda não aplicadas
     streaming: false, recording: false, lastStreamBytes: 0, lastStreamTs: 0,
     overlay: {}, roteiro: { itens: [], atual: -1 }, presets: { legendas: [], versiculos: [], avisos: [] },
     cams: [], config: null, info: null, editing: false, audioInputs: [],
@@ -77,7 +78,8 @@
       S.scenes = sl.scenes.sort((a, b) => b.sceneIndex - a.sceneIndex).map((s) => s.sceneName);
       S.program = sl.currentProgramSceneName;
       const tl = await obs('GetSceneTransitionList');
-      S.transitions = tl.transitions.map((t) => t.transitionName); S.transition = tl.currentSceneTransitionName;
+      S.transitionsFull = tl.transitions; S.transitions = tl.transitions.map((t) => t.transitionName); S.transition = tl.currentSceneTransitionName;
+      await refreshTransitionInfo(false);
       renderScenes(); renderTransitions(); renderRoteiroSceneOptions();
       const st = await obs('GetStreamStatus'); applyStreamStatus(st);
       const rc = await obs('GetRecordStatus'); S.recording = rc.outputActive; renderRecord();
@@ -90,7 +92,8 @@
     switch (ev) {
       case 'CurrentProgramSceneChanged': S.program = d.sceneName; renderScenes(); updateTally(); break;
       case 'SceneListChanged': case 'SceneCreated': case 'SceneRemoved': case 'SceneNameChanged': refreshObs(); if ($('#tab-telas').classList.contains('active')) setTimeout(refreshTelas, 300); break;
-      case 'CurrentSceneTransitionChanged': S.transition = d.transitionName; renderTransitions(); break;
+      case 'CurrentSceneTransitionChanged': S.transition = d.transitionName; refreshTransitionInfo(); break;
+      case 'CurrentSceneTransitionDurationChanged': S.transitionDur = d.transitionDuration; renderTransitions(); break;
       case 'StreamStateChanged': S.streaming = d.outputActive; renderStream(); break;
       case 'RecordStateChanged': S.recording = d.outputActive; renderRecord(); break;
       case 'InputMuteStateChanged': { const i = S.audioInputs.find((x) => x.name === d.inputName); if (i) { i.muted = d.inputMuted; renderAudio(); } break; }
@@ -104,7 +107,7 @@
     const box = $('#scenes'); box.innerHTML = '';
     const visible = S.scenes.filter((n) => n !== 'Overlay' && !n.startsWith('_'));
     visible.forEach((name, i) => {
-      const b = el('button', { class: name === S.program ? 'program' : '', onclick: () => setScene(name) }, [
+      const b = el('button', { class: name === S.program ? 'program' : '', onclick: (e) => setScene(name, e.shiftKey ? cutName() : '') }, [
         el('span', { text: name }),
         i < 9 ? el('span', { class: 'key', text: String(i + 1) }) : null,
         name === S.program ? el('span', { class: 'sub', text: 'NO AR' }) : null,
@@ -114,19 +117,53 @@
     if (!visible.length) box.append(el('p', { class: 'muted', text: S.obs ? 'Nenhuma cena no OBS.' : 'Conecte o OBS na aba Config.' }));
     $('#previewLabel').textContent = S.program || '';
   }
-  async function setScene(name) {
-    try { await obs('SetCurrentProgramScene', { sceneName: name }); } catch (e) { toast('Não foi possível trocar: ' + e.message, true); }
+  /** Troca de cena. Com "trans" (e opcionalmente "dur"), usa essa transição só desta vez e devolve a padrão depois. */
+  async function setScene(name, trans, dur) {
+    try {
+      const usar = trans && S.transitions.includes(trans) ? trans : '';
+      if (!usar || (usar === S.transition && (!dur || Number(dur) === S.transitionDur))) return await obs('SetCurrentProgramScene', { sceneName: name });
+      const antes = { nome: S.transition, dur: S.transitionDur };
+      const reqs = [{ request: 'SetCurrentSceneTransition', data: { transitionName: usar } }];
+      if (dur) reqs.push({ request: 'SetCurrentSceneTransitionDuration', data: { transitionDuration: Number(dur) } });
+      reqs.push({ request: 'SetCurrentProgramScene', data: { sceneName: name } });
+      const r = await obsBatch(reqs);
+      const falha = r.find((x) => !x.ok); if (falha) throw new Error(falha.error);
+      setTimeout(() => obsBatch([{ request: 'SetCurrentSceneTransition', data: { transitionName: antes.nome } }, { request: 'SetCurrentSceneTransitionDuration', data: { transitionDuration: antes.dur } }]).catch(() => {}), Math.max(300, Number(dur) || S.transitionDur) + 500);
+    } catch (e) { toast('Não foi possível trocar: ' + e.message, true); }
+  }
+  function cutName() { const t = S.transitionsFull.find((x) => x.transitionKind === 'cut_transition'); return t ? t.transitionName : ''; }
+  async function refreshTransitionInfo(render = true) {
+    try { const ct = await obs('GetCurrentSceneTransition'); S.transitionDur = ct.transitionDuration || S.transitionDur; S.transitionFixed = !!ct.transitionFixed; } catch { /* OBS antigo */ }
+    if (render) renderTransitions();
   }
   function renderTransitions() {
     const sel = $('#transition'); sel.innerHTML = '';
     for (const t of S.transitions) sel.append(el('option', { value: t, text: t, selected: t === S.transition }));
+    const d = $('#transitionDur'); if (document.activeElement !== d) d.value = S.transitionDur; d.disabled = S.transitionFixed; d.title = S.transitionFixed ? 'Esta transição tem duração fixa' : 'Duração da transição em milissegundos';
+    const box = $('#tsLista'); box.innerHTML = '';
+    for (const t of S.transitionsFull) {
+      const inp = el('input', { type: 'radio', name: 'tsAtual', value: t.transitionName, checked: t.transitionName === S.transition });
+      inp.addEventListener('change', () => obs('SetCurrentSceneTransition', { transitionName: t.transitionName }).catch((e) => toast(e.message, true)));
+      box.append(el('label', { class: 'ts-op' + (t.transitionName === S.transition ? ' on' : '') }, [inp, el('span', { text: t.transitionName }), el('span', { class: 'muted', text: tsKindLabel(t.transitionKind) })]));
+    }
+    if (!S.transitionsFull.length) box.append(el('p', { class: 'muted', text: S.obs ? 'Nenhuma transição no OBS.' : 'Conecte o OBS.' }));
+    const r = $('#tsDur'); if (document.activeElement !== r) r.value = Math.min(3000, S.transitionDur); r.disabled = S.transitionFixed; $('#tsDurVal').textContent = S.transitionDur;
+    const rt = $('#riTrans'); const cur = rt.value; rt.innerHTML = '<option value="">(a padrão)</option>';
+    for (const t of S.transitions) rt.append(el('option', { value: t, text: t })); rt.value = cur;
   }
+  const TS_KINDS = { cut_transition: 'corte', fade_transition: 'esmaecer', obs_stinger_transition: 'estinger', fade_to_color_transition: 'esmaecer para cor', slide_transition: 'deslizar', swipe_transition: 'varrer', wipe_transition: 'luma', scene_as_transition: 'cena' };
+  function tsKindLabel(k) { return TS_KINDS[k] || k || ''; }
   $('#transition').addEventListener('change', (e) => obs('SetCurrentSceneTransition', { transitionName: e.target.value }).catch(() => {}));
+  let durTimer = null;
+  function setDur(v) { v = Math.max(50, Math.min(20000, Number(v) || 300)); S.transitionDur = v; $('#tsDurVal').textContent = v; clearTimeout(durTimer); durTimer = setTimeout(() => obs('SetCurrentSceneTransitionDuration', { transitionDuration: v }).catch((e) => toast(e.message, true)), 250); }
+  $('#transitionDur').addEventListener('change', (e) => setDur(e.target.value));
+  $('#tsDur').addEventListener('input', (e) => setDur(e.target.value));
 
   document.addEventListener('keydown', (e) => {
     if (e.target.matches('input, textarea, select')) return;
     const visible = S.scenes.filter((n) => n !== 'Overlay' && !n.startsWith('_'));
-    if (e.key >= '1' && e.key <= '9' && visible[Number(e.key) - 1]) setScene(visible[Number(e.key) - 1]);
+    const num = e.code && /^(Digit|Numpad)[1-9]$/.test(e.code) ? Number(e.code.slice(-1)) : (e.key >= '1' && e.key <= '9' ? Number(e.key) : 0);
+    if (num && visible[num - 1]) setScene(visible[num - 1], e.shiftKey ? cutName() : '');
     if (e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); nextItem(1); }
     if (e.key === 'PageUp') { e.preventDefault(); nextItem(-1); }
     if (e.key === 'r' || e.key === 'R') rpSalvar();
@@ -262,7 +299,7 @@
     const ol = $('#roteiroList'); ol.innerHTML = ''; ol.classList.toggle('editing', S.editing);
     const { itens, atual } = S.roteiro;
     itens.forEach((it, i) => {
-      const desc = [it.cena ? '🎬 ' + it.cena : null, acaoLabel(it.acao)].filter(Boolean).join('  ·  ');
+      const desc = [it.cena ? '🎬 ' + it.cena : null, it.transicao ? '🎞️ ' + it.transicao + (it.transicaoDur ? ' ' + it.transicaoDur + ' ms' : '') : null, acaoLabel(it.acao)].filter(Boolean).join('  ·  ');
       const li = el('li', { class: i === atual ? 'atual' : i < atual ? 'feito' : '', onclick: () => goTo(i) }, [
         el('span', { class: 'num', text: String(i + 1) }),
         el('div', { class: 'info' }, [el('div', { class: 't', text: it.titulo }), el('div', { class: 'd', text: desc || 'sem ação' })]),
@@ -289,7 +326,7 @@
   async function goTo(i) {
     const it = S.roteiro.itens[i]; if (!it) return;
     S.roteiro.atual = i; saveRoteiro(); renderRoteiro();
-    if (it.cena) setScene(it.cena);
+    if (it.cena) setScene(it.cena, it.transicao || '', it.transicaoDur || 0);
     runAcao(it.acao);
   }
   function runAcao(a) {
@@ -320,7 +357,9 @@
     const tipo = $('#riAcao').value;
     const v = (id) => ($('#' + id) ? $('#' + id).value : '');
     const acao = { tipo, title: v('riTitle'), subtitle: v('riSubtitle'), ref: v('riRef'), text: v('riText'), minutes: Number(v('riMinutes') || 0), message: v('riMessage') };
-    S.roteiro.itens.push({ titulo, cena: $('#riCena').value, acao });
+    const item = { titulo, cena: $('#riCena').value, acao };
+    if ($('#riTrans').value) { item.transicao = $('#riTrans').value; if (Number($('#riTransDur').value)) item.transicaoDur = Number($('#riTransDur').value); }
+    S.roteiro.itens.push(item);
     $('#riTitulo').value = ''; saveRoteiro();
   });
   $('#riClear').addEventListener('click', () => { if (confirm('Apagar todo o roteiro?')) { S.roteiro = { itens: [], atual: -1 }; saveRoteiro(); } });
@@ -925,6 +964,100 @@
     } catch (e) { msg.textContent = ''; toast('Não criou: ' + e.message, true); }
   });
 
+  // ---- Transições na coleção do OBS (estinger etc.): mudam o arquivo da coleção e reiniciam o OBS
+  async function refreshTransicoes() {
+    try { S.tsInfo = await (await fetch('/api/transicoes')).json(); } catch (e) { toast(e.message, true); return; }
+    const sel = $('#tnEnviados'); const cur = sel.value; sel.innerHTML = '<option value="">(enviar um novo)</option>';
+    for (const e of S.tsInfo.estingers || []) sel.append(el('option', { value: e.arquivo, text: e.nome }));
+    sel.value = cur;
+    renderTsColecao();
+  }
+  function renderTsColecao() {
+    const box = $('#tsColecao'); box.innerHTML = '';
+    const info = S.tsInfo, pend = S.tsPend;
+    if (!info) return;
+    if (!info.colecao) box.append(el('p', { class: 'muted', text: info.obsInstalado ? 'Coleção de cenas do OBS não encontrada: abra o OBS uma vez.' : 'OBS não encontrado neste computador.' }));
+    else {
+      box.append(el('div', { class: 'muted', style: 'font-size:12px', text: `Coleção "${info.colecao.colecao}" · padrão: ${info.colecao.atual || '(do OBS)'} · ${info.colecao.duracao} ms` }));
+      for (const t of info.colecao.transicoes) {
+        const rem = pend.remover.includes(t.nome);
+        box.append(el('div', { class: 'rp-item' + (rem ? ' off' : '') }, [
+          el('span', { class: 'nome' }, [el('b', { text: t.nome }), ' ', el('span', { class: 'muted', text: '· ' + ((info.tipos[t.tipo] || {}).nome || t.tipo) + (t.settings.path ? ' · ' + t.settings.path.split(/[\\/]/).pop() : '') + (rem ? ' · será removida' : '') })]),
+          el('button', { class: 'small ghost' + (rem ? '' : ' danger'), text: rem ? 'Manter' : 'Remover', onclick: () => { pend.remover = rem ? pend.remover.filter((n) => n !== t.nome) : [...pend.remover, t.nome]; renderTsColecao(); } }),
+        ]));
+      }
+    }
+    for (const a of pend.adicionar) {
+      box.append(el('div', { class: 'rp-item novo' }, [
+        el('span', { class: 'nome' }, [el('b', { text: a.nome }), ' ', el('span', { class: 'muted', text: '· ' + (TN_TIPOS[a.tipo] || a.tipo) + (a.arquivo ? ' · ' + a.arquivo.split(/[\\/]/).pop() : '') + ' · nova' })]),
+        el('button', { class: 'small ghost', text: 'Tirar', onclick: () => { pend.adicionar = pend.adicionar.filter((x) => x !== a); renderTsColecao(); } }),
+      ]));
+    }
+    const temPend = pend.adicionar.length || pend.remover.length;
+    $('#tsPendBadge').style.display = temPend ? '' : 'none'; $('#tsAplicar').disabled = !temPend || !info.colecao; $('#tsDescartar').disabled = !temPend;
+  }
+  const TN_TIPOS = { estinger: 'Estinger (vídeo)', fadecor: 'Esmaecer para cor', deslizar: 'Deslizar', varrer: 'Varrer' };
+  function tnTipoUI() {
+    const t = $('#tnTipo').value;
+    $('#tnEstinger').style.display = t === 'estinger' ? '' : 'none';
+    $('#tnFadecor').style.display = t === 'fadecor' ? '' : 'none';
+    $('#tnDirecao').style.display = (t === 'deslizar' || t === 'varrer') ? '' : 'none';
+  }
+  $('#tnTipo').addEventListener('change', tnTipoUI);
+  $('#tnArquivo').addEventListener('change', () => {
+    const f = $('#tnArquivo').files[0], v = $('#tnPreview');
+    if (!f) { v.style.display = 'none'; return; }
+    v.src = URL.createObjectURL(f); v.style.display = ''; $('#tnEnviados').value = '';
+    if (!$('#tnNome').value.trim()) $('#tnNome').value = f.name.replace(/\.[^.]+$/, '');
+  });
+  $('#tnEnviados').addEventListener('change', () => {
+    const v = $('#tnPreview'), e = (S.tsInfo && S.tsInfo.estingers || []).find((x) => x.arquivo === $('#tnEnviados').value);
+    if (!e) { v.style.display = 'none'; return; }
+    $('#tnArquivo').value = ''; v.src = e.url; v.style.display = '';
+    if (!$('#tnNome').value.trim()) $('#tnNome').value = e.nome.replace(/\.[^.]+$/, '');
+  });
+  async function enviarEstinger(f, msg) {
+    msg.textContent = `Enviando ${f.name} (${(f.size / 1e6).toFixed(1)} MB)…`;
+    const r = await (await fetch('/api/transicoes/arquivo', { method: 'POST', headers: { 'x-nome': encodeURIComponent(f.name), 'Content-Type': 'application/octet-stream' }, body: f })).json();
+    if (r.error) throw new Error(r.error);
+    return r;
+  }
+  $('#tnAdd').addEventListener('click', async () => {
+    const msg = $('#tnMsg'), tipo = $('#tnTipo').value, nome = $('#tnNome').value.trim();
+    if (!nome) return toast('Dê um nome à transição', true);
+    const spec = { tipo, nome };
+    try {
+      if (tipo === 'estinger') {
+        const f = $('#tnArquivo').files[0];
+        if (f) spec.arquivo = (await enviarEstinger(f, msg)).arquivo;
+        else if ($('#tnEnviados').value) spec.arquivo = $('#tnEnviados').value;
+        else return toast('Escolha o vídeo do estinger', true);
+        spec.ponto = Number($('#tnPonto').value) || 0; spec.audio = $('#tnAudio').value;
+      } else if (tipo === 'fadecor') { spec.cor = $('#tnCor').value; spec.ponto = Number($('#tnPontoCor').value) || 50; }
+      else spec.direcao = $('#tnDir').value;
+      S.tsPend.adicionar = S.tsPend.adicionar.filter((x) => x.nome !== nome); S.tsPend.adicionar.push(spec);
+      msg.textContent = `"${nome}" na lista. Clique em "Aplicar e reiniciar o OBS" para valer.`;
+      $('#tnNome').value = ''; $('#tnArquivo').value = ''; $('#tnEnviados').value = ''; $('#tnPreview').style.display = 'none';
+      refreshTransicoes();
+    } catch (e) { msg.textContent = ''; toast('Não deu: ' + e.message, true); }
+  });
+  $('#tsDescartar').addEventListener('click', () => { S.tsPend = { adicionar: [], remover: [] }; renderTsColecao(); });
+  $('#tsAplicar').addEventListener('click', async () => {
+    if (S.streaming) return toast('Pare a transmissão antes de mudar as transições', true);
+    const msg = $('#tsMsg'); msg.textContent = 'Fechando o OBS, gravando a coleção e reabrindo… (uns 15 s)';
+    $('#tsAplicar').disabled = true;
+    try {
+      const body = Object.assign({}, S.tsPend);
+      const novo = body.adicionar[body.adicionar.length - 1]; if (novo && S.tsInfo && S.tsInfo.colecao && !S.tsInfo.colecao.transicoes.length) body.atual = novo.nome; // primeira transição nova vira a padrão
+      const r = await (await fetch('/api/transicoes', { method: 'PUT', body: JSON.stringify(body) })).json();
+      if (r.error) throw new Error(r.error);
+      S.tsPend = { adicionar: [], remover: [] };
+      msg.textContent = r.reabriu ? 'Pronto. O OBS está reabrindo; a nova transição aparece na lista em instantes.' : 'Pronto. Abra o OBS para a transição aparecer.';
+      toast('Transições aplicadas');
+      refreshTransicoes();
+    } catch (e) { msg.textContent = ''; toast('Não aplicou: ' + e.message, true); renderTsColecao(); }
+  });
+
   // ---- Tradução ao vivo
   const TR_IDIOMAS = { en: 'Inglês', es: 'Espanhol', fr: 'Francês', de: 'Alemão', it: 'Italiano', zh: 'Chinês', ja: 'Japonês', ko: 'Coreano', ru: 'Russo', ar: 'Árabe', nl: 'Holandês', pl: 'Polonês', uk: 'Ucraniano' };
   const TR_PROVEDORES = { anthropic: 'Claude (Anthropic) — precisa de chave, melhor qualidade', deepl: 'DeepL — precisa de chave (tem plano gratuito)', google: 'Google Tradutor — sem chave, sem garantia', nenhum: 'Nenhum — só o que foi falado, em português' };
@@ -1047,6 +1180,7 @@
     if (b.dataset.tab === 'telas') refreshTelas();
     if (b.dataset.tab === 'config') refreshSaida();
     if (b.dataset.tab === 'traducao') renderTrQr();
+    if (b.dataset.tab === 'transicoes') refreshTransicoes();
   });
   function setBadge(elm, cls, label) { elm.className = 'badge ' + cls; elm.innerHTML = `<span class="dot ${cls}"></span>${label}`; }
   let toastTimer;

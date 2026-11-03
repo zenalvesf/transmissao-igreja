@@ -220,6 +220,68 @@ function enableReplayBuffer(segundos) {
   return { file, segundos: seg, modo: sec };
 }
 
+// ---- Transições na coleção de cenas (estinger, deslizar, varrer, esmaecer para cor).
+// O obs-websocket não cria transições; escrevemos no JSON da coleção com o OBS fechado (ele regrava o arquivo ao sair).
+const TRANSICAO_TIPOS = {
+  estinger: { id: 'obs_stinger_transition', nome: 'Estinger (vídeo)' },
+  fadecor: { id: 'fade_to_color_transition', nome: 'Esmaecer para cor' },
+  deslizar: { id: 'slide_transition', nome: 'Deslizar' },
+  varrer: { id: 'swipe_transition', nome: 'Varrer' },
+};
+/** Arquivo da coleção de cenas em uso (OBS 31: user.ini; antigos: global.ini; padrão "Untitled"). */
+function sceneCollectionFile() {
+  let nome = 'Untitled';
+  for (const f of ['user.ini', 'global.ini']) {
+    try { const v = iniGet(parseIni(fs.readFileSync(path.join(OBS_DIR, f), 'utf8')), 'Basic', 'SceneCollectionFile'); if (v) { nome = v; break; } } catch { /* sem arquivo */ }
+  }
+  return path.join(OBS_DIR, 'basic', 'scenes', nome + '.json');
+}
+function readTransitions() {
+  const file = sceneCollectionFile();
+  let j; try { j = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; }
+  const lista = Array.isArray(j.transitions) ? j.transitions : [];
+  return {
+    file, colecao: j.name || path.basename(file, '.json'), atual: j.current_transition || '', duracao: Number(j.transition_duration) || 300,
+    transicoes: lista.map((t) => ({ nome: t.name, id: t.id, tipo: Object.keys(TRANSICAO_TIPOS).find((k) => TRANSICAO_TIPOS[k].id === t.id) || t.id, settings: t.settings || {} })),
+  };
+}
+function corAbgr(hex) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || '')); if (!m) return 4278190080; // preto opaco
+  const r = parseInt(m[1].slice(0, 2), 16), g = parseInt(m[1].slice(2, 4), 16), b = parseInt(m[1].slice(4, 6), 16);
+  return ((0xff << 24) | (b << 16) | (g << 8) | r) >>> 0;
+}
+function transitionFromSpec(sp) {
+  const tipo = TRANSICAO_TIPOS[sp.tipo]; if (!tipo) throw new Error('Tipo de transição desconhecido: ' + sp.tipo);
+  const nome = String(sp.nome || '').trim(); if (!nome) throw new Error('Dê um nome à transição');
+  let settings;
+  if (sp.tipo === 'estinger') {
+    if (!sp.arquivo || !fs.existsSync(sp.arquivo)) throw new Error('Arquivo de vídeo do estinger não encontrado');
+    settings = { path: sp.arquivo, transition_point: Math.max(0, Number(sp.ponto) || 0), tp_type: 0, audio_monitoring: 0, audio_fade_style: sp.audio === 'crossfade' ? 1 : 0, invert_matte: false, track_matte_enabled: false };
+  } else if (sp.tipo === 'fadecor') {
+    settings = { color: corAbgr(sp.cor || '#000000'), switch_point: Math.min(100, Math.max(0, Number(sp.ponto) || 50)) };
+  } else {
+    const dir = ['left', 'right', 'up', 'down'].includes(sp.direcao) ? sp.direcao : 'left';
+    settings = sp.tipo === 'varrer' ? { direction: dir, swipe_in: !!sp.entrar } : { direction: dir };
+  }
+  return { id: tipo.id, name: nome, settings };
+}
+/** Adiciona/remove transições na coleção de cenas e, se pedido, muda a padrão e a duração. Só com o OBS fechado. */
+function writeTransitions({ adicionar = [], remover = [], atual, duracao } = {}) {
+  if (isObsRunning()) throw new Error('Feche o OBS primeiro: ele regrava a coleção de cenas ao fechar.');
+  const file = sceneCollectionFile();
+  let j; try { j = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { throw new Error('Coleção de cenas do OBS não encontrada (' + file + '). Abra o OBS uma vez antes.'); }
+  if (!Array.isArray(j.transitions)) j.transitions = [];
+  const rem = new Set((remover || []).map(String));
+  j.transitions = j.transitions.filter((t) => !rem.has(t.name));
+  for (const sp of adicionar || []) { const t = transitionFromSpec(sp); j.transitions = j.transitions.filter((x) => x.name !== t.name); j.transitions.push(t); }
+  if (atual) j.current_transition = String(atual);
+  if (rem.has(j.current_transition)) delete j.current_transition;
+  if (duracao) j.transition_duration = Math.max(50, Math.min(20000, Number(duracao) || 300));
+  try { fs.copyFileSync(file, file + '.antes-da-mesa'); } catch { /* sem backup */ }
+  fs.writeFileSync(file, JSON.stringify(j, null, 4));
+  return readTransitions();
+}
+
 function status() {
   const exe = findObsExe();
   const ws = readWebsocketConfig();
@@ -231,4 +293,4 @@ function status() {
   };
 }
 
-module.exports = { readWebsocketConfig, detectedPassword, ensureWebsocketEnabled, findObsExe, isObsRunning, launchObs, closeObs, status, WS_CONFIG, readReplaySettings, enableReplayBuffer, readOutputSettings, writeOutputSettings, ENCODER_NOME, detectGpus, hardwareEncoders, parseIni, iniGet, iniSet, iniToString };
+module.exports = { TRANSICAO_TIPOS, sceneCollectionFile, readTransitions, writeTransitions, readWebsocketConfig, detectedPassword, ensureWebsocketEnabled, findObsExe, isObsRunning, launchObs, closeObs, status, WS_CONFIG, readReplaySettings, enableReplayBuffer, readOutputSettings, writeOutputSettings, ENCODER_NOME, detectGpus, hardwareEncoders, parseIni, iniGet, iniSet, iniToString };

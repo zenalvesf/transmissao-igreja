@@ -42,10 +42,11 @@
     </div>
     <div class="card">
       <div class="row between">
-        <h3>Cenas <span class="muted" id="sceneHint">(teclas 1–9)</span></h3>
-        <div class="row">
+        <h3>Cenas <span class="muted" id="sceneHint">(teclas 1–9 · Shift = corte seco)</span></h3>
+        <div class="row" style="gap:6px">
           <label class="inline">Transição</label>
           <select id="transition" class="small"></select>
+          <input id="transitionDur" class="small" type="number" min="50" max="20000" step="50" style="width:84px" title="Duração da transição em milissegundos"><span class="muted" style="font-size:12px">ms</span>
         </div>
       </div>
       <div id="scenes" class="scenes"></div>
@@ -60,6 +61,7 @@
       <button data-tab="cameras">📱 Câmeras</button>
       <button data-tab="fontes">🎥 Fontes</button>
       <button data-tab="telas">🧩 Telas</button>
+      <button data-tab="transicoes">🎞️ Transições</button>
       <button data-tab="audio">🎚️ Áudio</button>
       <button data-tab="destinos">📡 Destinos</button>
       <button data-tab="holyrics">🎵 Holyrics</button>
@@ -98,6 +100,10 @@
                 <option value="letraOff">Letra do Holyrics: ocultar</option>
               </select>
             </div>
+          </div>
+          <div class="grid2">
+            <div class="field"><label>Transição para esta cena</label><select id="riTrans"><option value="">(a padrão)</option></select></div>
+            <div class="field"><label>Duração (ms; em branco = a padrão)</label><input id="riTransDur" type="number" min="50" step="50" placeholder="300"></div>
           </div>
           <div id="riFields"></div>
           <div class="row">
@@ -234,6 +240,48 @@
       <div class="card">
         <div class="row between"><h2 style="margin:0">Cenas existentes</h2><button id="tlRefresh" class="ghost small">↻ Atualizar</button></div>
         <div id="tlLista" class="rp-lista"></div>
+      </div>
+    </div>
+
+    <!-- Transições -->
+    <div class="tab" id="tab-transicoes">
+      <div class="card">
+        <h2>Transição padrão</h2>
+        <p class="muted" style="margin-top:0">Usada ao trocar de cena pelos botões, teclas e roteiro. Muda na hora. <b>Shift + clique</b> numa cena corta seco, sem transição.</p>
+        <div id="tsLista" class="ts-lista"></div>
+        <div class="field" style="margin-top:8px"><label>Duração: <b id="tsDurVal">300</b> ms</label><input id="tsDur" type="range" min="50" max="3000" step="50" value="300"></div>
+      </div>
+
+      <div class="card">
+        <h2>Nova transição</h2>
+        <p class="muted" style="margin-top:0">Transições novas entram na coleção de cenas do OBS. Para valer, o OBS reinicia (uns 15 segundos; não faça com a transmissão no ar).</p>
+        <div class="grid2">
+          <div class="field"><label>Tipo</label><select id="tnTipo"><option value="estinger">Estinger (vídeo com transparência)</option><option value="fadecor">Esmaecer para uma cor</option><option value="deslizar">Deslizar</option><option value="varrer">Varrer</option></select></div>
+          <div class="field"><label>Nome</label><input id="tnNome" placeholder="Estinger da igreja"></div>
+        </div>
+        <div id="tnEstinger">
+          <div class="field"><label>Vídeo do estinger (.webm com fundo transparente, ou .mp4/.mov)</label><input id="tnArquivo" type="file" accept="video/*,.mkv,.webm"></div>
+          <div class="field"><label>Ou um vídeo já enviado</label><select id="tnEnviados"><option value="">(enviar um novo)</option></select></div>
+          <video id="tnPreview" controls muted playsinline style="display:none;width:100%;max-height:200px;background:#000;border-radius:8px;margin-bottom:10px"></video>
+          <div class="grid2">
+            <div class="field"><label>Ponto de troca (ms após o início do vídeo)</label><input id="tnPonto" type="number" value="500" min="0" step="50"></div>
+            <div class="field"><label>Áudio durante a transição</label><select id="tnAudio"><option value="fade">Esmaece e volta</option><option value="crossfade">Mistura os dois</option></select></div>
+          </div>
+          <p class="muted" style="font-size:12px;margin:0 0 8px">O ponto de troca é o instante em que o vídeo cobre a tela inteira: ali o OBS troca a cena por baixo. Dica: vídeos .webm (VP9 com alpha) ficam transparentes; .mp4 cobre tudo.</p>
+        </div>
+        <div id="tnFadecor" style="display:none" class="grid2">
+          <div class="field"><label>Cor</label><input id="tnCor" type="color" value="#000000"></div>
+          <div class="field"><label>Ponto de troca (%)</label><input id="tnPontoCor" type="number" value="50" min="0" max="100"></div>
+        </div>
+        <div id="tnDirecao" style="display:none" class="field"><label>Direção</label><select id="tnDir"><option value="left">Para a esquerda</option><option value="right">Para a direita</option><option value="up">Para cima</option><option value="down">Para baixo</option></select></div>
+        <div class="row" style="gap:8px;flex-wrap:wrap"><button id="tnAdd" class="primary">Adicionar à lista</button><span id="tnMsg" class="muted"></span></div>
+      </div>
+
+      <div class="card">
+        <div class="row between"><h2 style="margin:0">Transições na coleção do OBS</h2><span class="badge warn" id="tsPendBadge" hidden>mudanças pendentes</span></div>
+        <p class="muted" style="margin-top:0">Corte e Esmaecer são do próprio OBS e não saem da lista.</p>
+        <div id="tsColecao" class="rp-lista"></div>
+        <div class="row" style="gap:8px;flex-wrap:wrap;margin-top:8px"><button id="tsAplicar" class="primary" disabled>Aplicar e reiniciar o OBS</button><button id="tsDescartar" class="ghost small" disabled>Descartar</button><span id="tsMsg" class="muted"></span></div>
       </div>
     </div>
 
