@@ -91,6 +91,7 @@
     } catch (e) { toast('OBS: ' + e.message, true); }
   }
 
+  let afTimer = null;
   function onObsEvent(ev, d) {
     switch (ev) {
       case 'CurrentProgramSceneChanged': S.program = d.sceneName; renderScenes(); updateTally(); break;
@@ -101,6 +102,7 @@
       case 'RecordStateChanged': S.recording = d.outputActive; renderRecord(); break;
       case 'InputMuteStateChanged': { const i = S.audioInputs.find((x) => x.name === d.inputName); if (i) { i.muted = d.inputMuted; renderAudio(); } break; }
       case 'InputVolumeChanged': { const i = S.audioInputs.find((x) => x.name === d.inputName); if (i) { i.db = d.inputVolumeDb; renderAudio(); } break; }
+      case 'SourceFilterCreated': case 'SourceFilterRemoved': case 'SourceFilterEnableStateChanged': case 'InputAudioMonitorTypeChanged': if ($('#tab-audio').classList.contains('active')) { clearTimeout(afTimer); afTimer = setTimeout(refreshAudio, 250); } break;
       case 'InputCreated': case 'InputRemoved': case 'InputNameChanged': refreshAudio(); if ($('#tab-fontes').classList.contains('active')) refreshFontes(); break;
       default: break;
     }
@@ -486,25 +488,104 @@
   });
 
   // ------------------------------------------------------------ Áudio
+  // Filtros de áudio que a mesa controla (nomes fixos para reconhecer os seus no OBS)
+  const AF = {
+    ruido: { nome: 'Mesa: Redução de ruído', kind: 'noise_suppress_filter', label: '🧹 Ruído', title: 'Redução de ruído (ar-condicionado, chiado)', settings: { method: 'rnnoise' } },
+    portao: { nome: 'Mesa: Portão', kind: 'noise_gate_filter', label: '🚪 Portão', title: 'Silencia o microfone quando ninguém fala', settings: { attack_time: 25, hold_time: 200, release_time: 150 },
+      niveis: { leve: { open_threshold: -40, close_threshold: -50 }, medio: { open_threshold: -32, close_threshold: -42 }, forte: { open_threshold: -26, close_threshold: -36 } }, campo: 'open_threshold' },
+    compressor: { nome: 'Mesa: Compressor', kind: 'compressor_filter', label: '📈 Compressor', title: 'Nivela a voz: baixa os gritos, levanta o sussurro', settings: { attack_time: 6, release_time: 60 },
+      niveis: { leve: { ratio: 2.5, threshold: -14, output_gain: 1 }, medio: { ratio: 4, threshold: -18, output_gain: 2 }, forte: { ratio: 6, threshold: -22, output_gain: 4 } }, campo: 'ratio' },
+    limitador: { nome: 'Mesa: Limitador', kind: 'limiter_filter', label: '🧱 Limitador', title: 'Impede o som de estourar', settings: { threshold: -3, release_time: 60 } },
+    ganho: { nome: 'Mesa: Ganho', kind: 'gain_filter', label: '🔼 Ganho', title: 'Aumenta ou diminui o volume antes dos outros filtros', settings: { db: 0 } },
+  };
+  const AF_ORDEM = ['ruido', 'portao', 'ganho', 'compressor', 'limitador'];
+  const MONITOR = { OBS_MONITORING_TYPE_NONE: 'Fone: não', OBS_MONITORING_TYPE_MONITOR_ONLY: 'Fone: só o operador', OBS_MONITORING_TYPE_MONITOR_AND_OUTPUT: 'Fone e transmissão' };
+  function afNivel(key, settings) { // qual predefinição está mais perto do valor atual
+    const d = AF[key]; if (!d.niveis) return '';
+    let melhor = 'medio', dist = Infinity;
+    for (const [n, v] of Object.entries(d.niveis)) { const x = Math.abs((settings[d.campo] || 0) - v[d.campo]); if (x < dist) { dist = x; melhor = n; } }
+    return melhor;
+  }
   async function refreshAudio() {
     if (!S.obs) return;
     try {
       const list = (await obs('GetInputList')).inputs;
       const res = await obsBatch(list.map((i) => ({ request: 'GetInputVolume', data: { inputName: i.inputName } })));
-      const mutes = await obsBatch(list.map((i) => ({ request: 'GetInputMute', data: { inputName: i.inputName } })));
-      S.audioInputs = list.map((i, k) => res[k].ok ? { name: i.inputName, db: res[k].data.inputVolumeDb, muted: mutes[k].ok ? mutes[k].data.inputMuted : false } : null).filter(Boolean);
+      const comAudio = list.filter((i, k) => res[k].ok);
+      const [mutes, filtros, monitores] = await Promise.all([
+        obsBatch(comAudio.map((i) => ({ request: 'GetInputMute', data: { inputName: i.inputName } }))),
+        obsBatch(comAudio.map((i) => ({ request: 'GetSourceFilterList', data: { sourceName: i.inputName } }))),
+        obsBatch(comAudio.map((i) => ({ request: 'GetInputAudioMonitorType', data: { inputName: i.inputName } }))),
+      ]);
+      S.audioInputs = comAudio.map((i, k) => ({
+        name: i.inputName, kind: i.inputKind, db: res[list.indexOf(i)].data.inputVolumeDb, muted: mutes[k].ok ? mutes[k].data.inputMuted : false,
+        filtros: filtros[k].ok ? filtros[k].data.filters : [], monitor: monitores[k].ok ? monitores[k].data.monitorType : '',
+      }));
       renderAudio();
     } catch { /* ignorar */ }
+  }
+  /** Liga/desliga (criando se preciso) um filtro da mesa numa fonte; "extra" muda ajustes. */
+  async function afSet(input, key, ligar, extra) {
+    const d = AF[key], atual = (input.filtros || []).find((f) => f.filterName === d.nome);
+    try {
+      if (!atual) {
+        if (ligar) await obs('CreateSourceFilter', { sourceName: input.name, filterName: d.nome, filterKind: d.kind, filterSettings: Object.assign({}, d.settings, d.niveis ? d.niveis.medio : {}, extra || {}) });
+      } else {
+        if (extra) await obs('SetSourceFilterSettings', { sourceName: input.name, filterName: d.nome, filterSettings: extra, overlay: true });
+        if (ligar !== null && ligar !== atual.filterEnabled) await obs('SetSourceFilterEnabled', { sourceName: input.name, filterName: d.nome, filterEnabled: !!ligar });
+      }
+    } catch (e) { toast('Filtro: ' + e.message, true); }
+    refreshAudio();
+  }
+  /** Cadeia recomendada para fala: remove os filtros da mesa e recria na ordem certa. */
+  async function afVoz(input) {
+    try {
+      for (const f of (input.filtros || [])) if (Object.values(AF).some((d) => d.nome === f.filterName)) await obs('RemoveSourceFilter', { sourceName: input.name, filterName: f.filterName });
+      for (const key of ['ruido', 'portao', 'compressor', 'limitador']) { const d = AF[key]; await obs('CreateSourceFilter', { sourceName: input.name, filterName: d.nome, filterKind: d.kind, filterSettings: Object.assign({}, d.settings, d.niveis ? d.niveis.medio : {}) }); }
+      toast('Filtros de voz aplicados em ' + input.name);
+    } catch (e) { toast('Filtro: ' + e.message, true); }
+    refreshAudio();
+  }
+  async function afLimpar(input) {
+    try { for (const f of (input.filtros || [])) if (Object.values(AF).some((d) => d.nome === f.filterName)) await obs('RemoveSourceFilter', { sourceName: input.name, filterName: f.filterName }); }
+    catch (e) { toast('Filtro: ' + e.message, true); }
+    refreshAudio();
   }
   function renderAudio() {
     const box = $('#audioList'); box.innerHTML = '';
     if (!S.audioInputs.length) box.append(el('p', { class: 'muted', text: 'Nenhuma fonte de áudio encontrada no OBS.' }));
     for (const i of S.audioInputs) {
+      const monSel = el('select', { class: 'small', title: 'O que o operador ouve no fone do PC' });
+      for (const [k, v] of Object.entries(MONITOR)) monSel.append(el('option', { value: k, text: v, selected: k === i.monitor }));
+      monSel.addEventListener('change', () => obs('SetInputAudioMonitorType', { inputName: i.name, monitorType: monSel.value }).catch((e) => toast(e.message, true)));
+      const filtros = el('div', { class: 'filtros' });
+      const meus = (i.filtros || []).filter((f) => Object.values(AF).some((d) => d.nome === f.filterName));
+      filtros.append(el('button', { class: 'chip-f voz', text: '🎤 Voz de pregação', title: 'Liga ruído + portão + compressor + limitador com ajustes para fala', onclick: () => afVoz(i) }));
+      for (const key of AF_ORDEM) {
+        const d = AF[key], f = (i.filtros || []).find((x) => x.filterName === d.nome), on = !!(f && f.filterEnabled);
+        filtros.append(el('button', { class: 'chip-f' + (on ? ' on' : ''), text: d.label, title: d.title + (f ? '' : ' (clique para ligar)'), onclick: () => afSet(i, key, !on) }));
+        if (on && d.niveis) {
+          const sel = el('select', { class: 'small nivel' });
+          for (const [n, lab] of Object.entries({ leve: 'leve', medio: 'médio', forte: 'forte' })) sel.append(el('option', { value: n, text: lab, selected: n === afNivel(key, f.filterSettings || {}) }));
+          sel.addEventListener('change', () => afSet(i, key, null, d.niveis[sel.value]));
+          filtros.append(sel);
+        }
+        if (on && key === 'ganho') {
+          const v = Number((f.filterSettings || {}).db) || 0, lab = el('span', { class: 'muted', text: (v > 0 ? '+' : '') + v + ' dB' });
+          const r = el('input', { type: 'range', class: 'ganho', min: -20, max: 20, step: 1, value: v });
+          let t = null; r.addEventListener('input', () => { lab.textContent = (r.value > 0 ? '+' : '') + r.value + ' dB'; clearTimeout(t); t = setTimeout(() => afSet(i, 'ganho', null, { db: Number(r.value) }), 300); });
+          filtros.append(r, lab);
+        }
+      }
+      if (meus.length) filtros.append(el('button', { class: 'chip-f ghost', text: '✕ tirar filtros', onclick: () => afLimpar(i) }));
+      const outros = (i.filtros || []).filter((f) => !meus.includes(f));
+      if (outros.length) filtros.append(el('span', { class: 'muted', style: 'font-size:12px', text: 'Outros filtros no OBS: ' + outros.map((f) => f.filterName + (f.filterEnabled ? '' : ' (desligado)')).join(', ') }));
       box.append(el('div', { class: 'in' }, [
-        el('div', { class: 'name', text: i.name }),
+        el('div', { class: 'top' }, [el('div', { class: 'name', text: i.name }), monSel]),
         el('button', { class: i.muted ? 'muted' : '', text: i.muted ? '🔇' : '🔊', title: 'Mudo', onclick: () => obs('SetInputMute', { inputName: i.name, inputMuted: !i.muted }).catch(() => {}) }),
         el('input', { type: 'range', min: -60, max: 0, step: 0.5, value: Math.max(-60, i.db), oninput: (e) => { const db = Number(e.target.value); obs('SetInputVolume', { inputName: i.name, inputVolumeDb: db <= -60 ? -100 : db }).catch(() => {}); } }),
         el('div', { class: 'db', text: i.db <= -60 ? '-∞' : i.db.toFixed(1) + ' dB' }),
+        filtros,
       ]));
     }
   }

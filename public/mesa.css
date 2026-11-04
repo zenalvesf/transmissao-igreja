@@ -213,3 +213,14 @@ button.danger.ghost { background: transparent; color: var(--danger); border-colo
 .pl-agora { margin: 6px 0 8px; min-height: 24px; }
 .pl-prog { height: 8px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; overflow: hidden; margin-bottom: 4px; }
 .pl-prog i { display: block; height: 100%; width: 0; background: var(--live); transition: width .4s linear; }
+
+/* ---- Filtros de áudio ---- */
+.audio .in .top { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.audio .in .top .name { grid-column: auto; }
+.audio .in .top select { width: auto; min-height: 32px; font-size: 12px; padding: 4px 8px; }
+.audio .in .filtros { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding-top: 6px; border-top: 1px dashed var(--line); }
+.audio .in .filtros .chip-f { min-height: 32px; padding: 4px 10px; font-size: 13px; border-radius: 999px; }
+.audio .in .filtros .chip-f.on { border-color: var(--ok); background: rgba(46,204,113,.15); color: var(--ok); }
+.audio .in .filtros .chip-f.voz { border-color: var(--accent); color: var(--accent); }
+.audio .in .filtros select.nivel { width: auto; min-height: 30px; font-size: 12px; padding: 2px 6px; }
+.audio .in .filtros input.ganho { width: 110px; }

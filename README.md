@@ -115,6 +115,15 @@ Desde a versão 1.5 o OBS é só o motor. O programa abre o OBS junto, minimizad
 - **Config → Conexão com o OBS:** "Abrir o OBS escondido" e "Abrir o OBS junto com este programa" podem ser desligados para quem prefere ver a janela do OBS. **Fechar OBS** fecha com cuidado (recusa se estiver transmitindo).
 - Para abrir a janela do OBS quando precisar de algo que a mesa ainda não faz: ícone do OBS na bandeja do Windows → Mostrar.
 
+## Áudio: mixer, filtros e fone do operador
+
+Aba **Áudio** da mesa, por microfone ou fonte de som:
+
+- **Mixer:** volume e mudo, como antes.
+- **Fone:** o que o operador ouve no fone do PC: nada, só o operador (não vai para a transmissão) ou fone e transmissão. No OBS isso é o "monitoramento de áudio"; o dispositivo do fone fica em Configurações → Áudio → Dispositivo de monitoramento.
+- **Voz de pregação:** um clique liga, na ordem certa, redução de ruído (RNNoise), portão, compressor e limitador com ajustes bons para fala. Dá para ligar e desligar cada um separadamente, escolher a força do portão e do compressor (leve, médio, forte) e acrescentar um **ganho** de −20 a +20 dB.
+- Os filtros criados pela mesa têm nome "Mesa: …" no OBS; outros filtros já existentes aparecem só como informação. **Tirar filtros** remove só os da mesa.
+
 ## Player de vídeos (playlist)
 
 Aba **Vídeos** da mesa: vídeos de avisos, abertura, testemunhos e encerramento tocam na transmissão sem abrir o OBS.
@@ -222,6 +231,8 @@ transmissao-igreja/
 
 - **O celular diz que precisa de https.** Use o QR code, que já aponta para o endereço https. Se o IP do PC mudou, feche e abra o `iniciar.bat` de novo e apague a pasta `certs` para gerar um certificado com o IP novo.
 - **O OBS abriu com uma janela de "assistente de configuração automática".** Acontece só na primeira abertura do OBS num PC novo. Clique em Cancelar; depois use a qualidade da mesa.
+- **O microfone fica picotando ou cortando o começo das palavras.** O portão está forte demais: na aba Áudio, mude o portão para "leve" ou desligue-o. Em sala silenciosa o portão quase não é necessário.
+- **A voz sai abafada ou robótica.** Desligue a redução de ruído para esse microfone; ela ajuda com ar-condicionado e chiado, mas mastiga vozes muito baixas.
 - **O vídeo toca sem som ou com som baixo.** Confira o volume na aba Vídeos e, no OBS, se a fonte "Player (vídeo)" não está silenciada no mixer (aba Áudio da mesa).
 - **O vídeo não aparece: tela preta na cena "Vídeo".** Formatos seguros: MP4 (H.264 + AAC) e WEBM. Vídeos muito pesados (4K, taxa de bits alta) travam em PC fraco: converta para 1080p antes.
 - **A logo ou o QR não aparecem na transmissão.** O overlay precisa estar na cena (botão "Configurar OBS automaticamente" na aba Câmeras coloca a cena "Overlay" em todas). Confira também o selo "NA TELA" ao lado de cada item na aba Gráficos: a logo só liga depois de escolher uma imagem, e o QR só com conteúdo preenchido.
