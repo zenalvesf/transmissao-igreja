@@ -174,7 +174,7 @@ function readBody(req) {
 }
 
 // ---------------------------------------------------------------- HTTP
-const PAGES = { '/': 'index.html', '/cam': 'cam.html', '/view': 'view.html', '/overlay': 'overlay.html', '/mesa': 'mesa.html', '/multiview': 'multiview.html', '/ouvir': 'ouvir.html', '/traducao': 'traducao.html' };
+const PAGES = { '/': 'index.html', '/cam': 'cam.html', '/view': 'view.html', '/overlay': 'overlay.html', '/mesa': 'mesa.html', '/multiview': 'multiview.html', '/ouvir': 'ouvir.html', '/traducao': 'traducao.html', '/manual': 'manual.html' };
 
 async function handleHttp(req, res) {
   const url = new URL(req.url, 'http://x');

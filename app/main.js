@@ -89,6 +89,7 @@ function buildTray() {
     tray.setContextMenu(Menu.buildFromTemplate([
       { label: 'Abrir mesa de produção', click: showWindow },
       { label: 'Página com QR codes dos celulares', click: () => shell.openExternal(homeUrl()) },
+      { label: 'Manual de uso', click: () => shell.openExternal(homeUrl() + 'manual') },
       { type: 'separator' },
       { label: 'Abrir OBS', click: () => { try { server.obsLocal.launchObs({ invisivel: server.config.obs.invisivel !== false }); } catch (e) { dialog.showErrorBox('OBS', e.message); } } },
       { label: 'Iniciar junto com o Windows', type: 'checkbox', checked: loginItem(), click: (item) => { app.setLoginItemSettings({ openAtLogin: item.checked, args: ['--hidden'] }); refresh(); } },

@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Manual de uso — Transmissão Igreja</title>
+<style>
+  :root { --accent: #2f6fdb; --muted: #5b6372; --line: #d9dde5; --bg: #fff; --text: #1b1f27; --panel: #f3f5f9; }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.55 "Segoe UI", system-ui, -apple-system, Roboto, sans-serif; }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 32px 24px 80px; }
+  header.capa { border-bottom: 4px solid var(--accent); padding-bottom: 18px; margin-bottom: 28px; }
+  header.capa h1 { font-size: 34px; margin: 0 0 6px; }
+  header.capa p { margin: 0; color: var(--muted); font-size: 17px; }
+  h2 { font-size: 24px; margin: 40px 0 10px; padding-top: 10px; border-top: 1px solid var(--line); color: var(--accent); }
+  h3 { font-size: 18px; margin: 22px 0 6px; }
+  p, li { max-width: 78ch; }
+  ul, ol { padding-left: 24px; }
+  li { margin: 4px 0; }
+  code { background: var(--panel); padding: 1px 6px; border-radius: 5px; font-size: 14px; }
+  .box { background: var(--panel); border-left: 5px solid var(--accent); padding: 12px 16px; border-radius: 8px; margin: 14px 0; }
+  .box.alerta { border-color: #e67e22; }
+  .box b:first-child { display: block; margin-bottom: 4px; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 15px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { background: var(--panel); }
+  kbd { background: #eef1f6; border: 1px solid #c9cfda; border-bottom-width: 2px; border-radius: 5px; padding: 1px 7px; font-size: 13px; font-family: inherit; }
+  nav.sumario { background: var(--panel); padding: 14px 18px; border-radius: 10px; margin-bottom: 20px; }
+  nav.sumario ol { margin: 6px 0 0; columns: 2; column-gap: 24px; }
+  nav.sumario a { color: var(--text); text-decoration: none; }
+  nav.sumario a:hover { text-decoration: underline; }
+  .aba { display: inline-block; background: var(--accent); color: #fff; padding: 1px 8px; border-radius: 6px; font-size: 13px; font-weight: 600; vertical-align: middle; }
+  .imprimir { position: fixed; right: 16px; top: 16px; background: var(--accent); color: #fff; border: 0; border-radius: 8px; padding: 10px 14px; font-size: 14px; cursor: pointer; }
+  footer { margin-top: 50px; color: var(--muted); font-size: 14px; border-top: 1px solid var(--line); padding-top: 12px; }
+  @media print {
+    .imprimir { display: none; }
+    body { font-size: 12.5pt; }
+    .wrap { max-width: none; padding: 0; }
+    h2 { break-before: page; border-top: 0; }
+    h2:first-of-type { break-before: auto; }
+    nav.sumario ol { columns: 2; }
+    .box, table, li { break-inside: avoid; }
+    a { color: inherit; text-decoration: none; }
+  }
+</style>
+</head>
+<body>
+<button class="imprimir" onclick="window.print()">🖨️ Imprimir / salvar em PDF</button>
+<div class="wrap">
+
+<header class="capa">
+  <h1>⛪ Transmissão Igreja — Manual de uso</h1>
+  <p>Mesa de transmissão para voluntários: câmeras pelo celular, legendas, vídeos, tradução ao vivo e muito mais, com o OBS trabalhando escondido.</p>
+</header>
+
+<nav class="sumario">
+  <b>Sumário</b>
+  <ol>
+    <li><a href="#visao">O que é o programa</a></li>
+    <li><a href="#instalar">Instalar no PC da igreja</a></li>
+    <li><a href="#primeira">Primeira configuração</a></li>
+    <li><a href="#dia">Checklist do dia do culto</a></li>
+    <li><a href="#celular">Celular como câmera</a></li>
+    <li><a href="#mesa">A mesa, aba por aba</a></li>
+    <li><a href="#atalhos">Atalhos de teclado</a></li>
+    <li><a href="#membros">Tradução para os membros</a></li>
+    <li><a href="#problemas">Problemas comuns</a></li>
+    <li><a href="#enderecos">Endereços úteis</a></li>
+  </ol>
+</nav>
+
+<h2 id="visao">1. O que é o programa</h2>
+<p>O <b>Transmissão Igreja</b> é um programa instalado no PC de transmissão. Ele usa o OBS Studio como motor, mas o OBS fica <b>escondido na bandeja do Windows</b>: o operador só mexe na <b>mesa</b>, uma tela com botões grandes que funciona no PC ou num tablet.</p>
+<ul>
+  <li><b>Câmeras pelo celular</b>, sem instalar nada: o celular abre um link e vira uma câmera do OBS pelo Wi‑Fi da igreja.</li>
+  <li><b>Legendas e gráficos</b>: nome do pregador, versículo, aviso rolante, título, contagem regressiva, letra do Holyrics, logo da igreja, QR do PIX, relógio e cartões em tela cheia.</li>
+  <li><b>Roteiro do culto</b>: a ordem do culto com a cena e a legenda de cada momento; o botão <b>Próximo</b> faz tudo de uma vez.</li>
+  <li><b>Vídeos</b> de avisos e abertura, <b>replay</b> instantâneo, <b>multiview</b> para um segundo monitor.</li>
+  <li><b>YouTube e Instagram ao mesmo tempo</b>, <b>tradução ao vivo</b> para visitantes que não falam português e <b>filtros de áudio</b> para a voz do pregador.</li>
+</ul>
+
+<h2 id="instalar">2. Instalar no PC da igreja</h2>
+<div class="box"><b>Você precisa de:</b> Windows 10 ou 11, <b>OBS Studio 28 ou mais novo</b> instalado (obsproject.com), e o PC e os celulares no <b>mesmo Wi‑Fi</b>.</div>
+<ol>
+  <li>Baixe o instalador <code>TransmissaoIgreja-Setup-x.y.z.exe</code> e dê dois cliques. Não pede nada: instala e abre sozinho.</li>
+  <li>O programa abre a mesa numa janela própria e deixa um ícone na <b>bandeja</b> (perto do relógio). Fechar a janela <b>não desliga nada</b>; para desligar de verdade: ícone da bandeja → <b>Sair</b>.</li>
+  <li>Se o Windows perguntar sobre o <b>firewall</b>, permita em redes <b>privadas</b>. Sem isso os celulares não alcançam o PC.</li>
+  <li>Opcional: ícone da bandeja → <b>Iniciar junto com o Windows</b>. Assim o programa já está pronto quando o PC liga.</li>
+</ol>
+<p>Para atualizar, instale a versão nova por cima: as configurações, o roteiro e os modelos são mantidos.</p>
+
+<h2 id="primeira">3. Primeira configuração (uma vez só)</h2>
+<ol>
+  <li><span class="aba">Config</span> A mesa mostra o OBS deste computador. Se ele estiver fechado, clique em <b>Abrir OBS</b>; o programa liga o WebSocket e lê a senha sozinho. O selo <b>OBS</b> no alto da mesa fica verde.</li>
+  <li><span class="aba">Config</span> Em <b>Nomes das câmeras</b>, escreva um nome por linha (ex.: <i>Púlpito</i>, <i>Plateia</i>, <i>Banda</i>). São os nomes que aparecem no celular.</li>
+  <li><span class="aba">Câmeras</span> Clique em <b>Configurar OBS automaticamente</b>. Ele cria no OBS uma cena para cada celular e a cena <b>Overlay</b> (as legendas), já colocada por cima de todas as cenas.</li>
+  <li><span class="aba">Fontes</span> Se houver webcams ou placa de captura ligadas no PC, clique em <b>Adicionar</b> para cada uma: vira uma cena com o mesmo nome. Adicione também o <b>microfone</b> (ou a saída da mesa de som ligada no PC): ele entra em todas as cenas.</li>
+  <li><span class="aba">Config</span> Em <b>Qualidade da transmissão</b>, escolha <b>PC fraco (720p)</b>, <b>Padrão (1080p)</b> ou <b>Alta</b>. Depois clique em <b>Reiniciar o OBS para valer</b>.</li>
+  <li><span class="aba">Destinos</span> Clique em <b>Apontar o OBS para este programa</b>. Ligue o <b>YouTube</b> e cole a chave de transmissão do YouTube Studio. Se usar Instagram, veja a aba Destinos mais abaixo.</li>
+  <li><span class="aba">Gráficos</span> Em <b>Imagens</b>, envie a logo da igreja (PNG com fundo transparente) e clique em <b>Logo</b>. Em <b>Tema</b>, escolha a cor da igreja.</li>
+  <li><span class="aba">Áudio</span> No microfone do pregador, clique em <b>🎤 Voz de pregação</b>: liga redução de ruído, portão, compressor e limitador com ajustes bons para fala.</li>
+</ol>
+
+<h2 id="dia">4. Checklist do dia do culto</h2>
+<ol>
+  <li>Abra o <b>Transmissão Igreja</b> (atalho na área de trabalho). O OBS abre sozinho, escondido.</li>
+  <li><b>Celulares</b>: cada voluntário lê o QR code da página inicial ou da aba Câmeras e toca em <b>Iniciar câmera</b> (passo a passo na seção 5). Deixe no tripé, carregando.</li>
+  <li><b>Destinos</b>: confira se YouTube (e Instagram) estão ligados. A chave do Instagram muda a cada live.</li>
+  <li><b>Holyrics</b>: selo "conectado" e <b>Mostrar a letra na live</b> ligado, se a igreja usa o Holyrics.</li>
+  <li><b>Tradução</b>: se houver visitantes estrangeiros, aba Tradução → <b>Tradução ligada</b> → <b>Abrir o ouvinte neste PC</b> → <b>Começar a ouvir</b>.</li>
+  <li><b>Vídeos</b>: se houver vídeo de abertura ou avisos, confira se está na lista.</li>
+  <li>Clique em <b>▶ Iniciar transmissão</b> no alto da mesa. O selo fica vermelho <b>AO VIVO</b>.</li>
+  <li>Durante o culto, siga o <b>Roteiro</b> com o botão <b>Próximo</b> (ou a tecla <kbd>Espaço</kbd>). Para cortar direto para uma cena, clique nela ou tecle <kbd>1</kbd> a <kbd>9</kbd>.</li>
+  <li>No fim: <b>Encerrar transmissão</b>. O programa pode ficar aberto.</li>
+</ol>
+<div class="box alerta"><b>Nunca faça com a transmissão no ar:</b> aplicar transições novas, reiniciar o OBS ou mudar a qualidade. A mesa recusa, mas é bom saber.</div>
+
+<h2 id="celular">5. Celular como câmera (para o voluntário do celular)</h2>
+<ol>
+  <li>Conecte o celular no <b>Wi‑Fi da igreja</b> (não use a rede de visitantes).</li>
+  <li>Aponte a câmera do celular para o <b>QR code</b> que está na página inicial do programa (ícone da bandeja → <b>Página com QR codes</b>) ou na aba Câmeras da mesa.</li>
+  <li>O navegador vai avisar que o site "não é seguro" ou que o certificado não é confiável. Toque em <b>Avançado → Continuar</b> (no iPhone: <b>Mostrar detalhes → Visitar este site</b>). Isso acontece só na primeira vez.</li>
+  <li>Escolha o <b>nome da câmera</b>, a qualidade (<b>720p / 30 fps</b> é o ideal para PC antigo) e toque em <b>Iniciar câmera</b>. Permita câmera e microfone quando pedir.</li>
+  <li>Prenda no tripé, ligue no carregador e não feche o navegador. A tela fica acesa sozinha. Quando essa câmera estiver no ar, o celular mostra uma borda vermelha e o aviso <b>NO AR</b>.</li>
+</ol>
+<p>Se o Wi‑Fi oscilar, a câmera reconecta sozinha. Se a imagem congelar no OBS, na mesa (aba Câmeras) clique em <b>Reiniciar vídeo</b> daquele celular.</p>
+
+<h2 id="mesa">6. A mesa, aba por aba</h2>
+<p>No alto da mesa ficam os selos de estado (OBS, servidor, destinos, Holyrics, tradução), o botão <b>Multiview</b>, <b>Gravar</b> e <b>Iniciar/Encerrar transmissão</b>. À esquerda, a prévia do programa e os botões de <b>Cenas</b> (com a transição e a duração ao lado). À direita, as abas.</p>
+
+<h3><span class="aba">Roteiro</span> a ordem do culto</h3>
+<ul>
+  <li>Cada item tem um título, a cena para onde ir e uma ação de legenda (mostrar legenda inferior, versículo, título, aviso, contagem regressiva, letra do Holyrics, cartão, QR, vídeo…). Pode ter também uma transição própria.</li>
+  <li><b>Próximo ▶</b> executa o item seguinte: troca a cena e dispara a legenda. <b>◀ Anterior</b> volta. Clicar num item vai direto para ele.</li>
+  <li><b>✏️ Editar</b> abre o formulário de novo item e os botões ▲ ▼ ✕ em cada item. <b>Limpar roteiro</b> apaga tudo.</li>
+</ul>
+
+<h3><span class="aba">Legendas</span> o que aparece por cima da imagem</h3>
+<ul>
+  <li><b>Legenda inferior</b>: nome e função (ex.: pregador). <b>💾 Salvar modelo</b> guarda para reutilizar com um clique.</li>
+  <li><b>Versículo</b>: referência e texto. <b>Aviso rolante</b>: faixa no rodapé. <b>Título central</b>: texto grande no meio. <b>Contagem regressiva</b>: minutos a partir de agora ou até um horário, com mensagem.</li>
+  <li><b>Limpar todas as legendas da tela</b> tira tudo de uma vez.</li>
+</ul>
+
+<h3><span class="aba">Gráficos</span> tema, logo, QR, relógio e cartão</h3>
+<ul>
+  <li><b>Cartão em tela cheia</b>: título, texto e imagem de fundo (ou cor). Para avisos, programação, boas-vindas e encerramento. Salve modelos para usar no roteiro.</li>
+  <li><b>QR na tela</b>: chave PIX, "copia e cola" ou link, com rótulo. Para a hora da oferta.</li>
+  <li><b>Logo da igreja</b> como marca-d'água e <b>Relógio</b> num canto.</li>
+  <li><b>Tema</b>: cor da igreja, fonte, estilo (clássico, moderno, arredondado) e posição da legenda inferior. Vale para todas as legendas.</li>
+</ul>
+
+<h3><span class="aba">Vídeos</span> player com lista</h3>
+<ul>
+  <li><b>Enviar vídeo</b> ou colar o caminho de um arquivo já no PC. <b>▶</b> coloca no ar: a mesa cria a cena "Vídeo" no OBS, corta para ela e mostra a barra de progresso.</li>
+  <li><b>Ao terminar</b>: voltar para a cena anterior, tocar o próximo ou repetir a lista (loop antes do culto). Opção de <b>silenciar os microfones</b> enquanto toca.</li>
+</ul>
+
+<h3><span class="aba">Câmeras</span> os celulares</h3>
+<ul>
+  <li>Lista os celulares conectados com qualidade, bateria e botões (reiniciar vídeo, trocar câmera, lanterna, qualidade). QR code para conectar novos.</li>
+  <li><b>Configurar OBS automaticamente</b> cria as cenas dos celulares e o Overlay.</li>
+</ul>
+
+<h3><span class="aba">Fontes</span> webcams, microfones e capturas</h3>
+<ul>
+  <li>Lista as fontes do OBS; troca o dispositivo de cada uma (qual webcam, qual microfone) e remove. <b>Adicionar</b> cria webcam, placa de captura ou captura de tela como uma cena nova.</li>
+</ul>
+
+<h3><span class="aba">Telas</span> duas câmeras na mesma tela</h3>
+<ul>
+  <li><b>Principal + canto</b> (pregador grande, telão pequeno num canto), <b>lado a lado</b> ou <b>principal + faixa embaixo</b>. Escolha as duas fontes e clique em <b>Criar tela</b>; a tela nova vira uma cena.</li>
+</ul>
+
+<h3><span class="aba">Transições</span> como uma cena vira outra</h3>
+<ul>
+  <li>Transição padrão e duração (valem na hora). <kbd>Shift</kbd> + clique numa cena corta seco.</li>
+  <li><b>Nova transição</b>: estinger (vídeo de abertura da igreja, de preferência .webm com fundo transparente), esmaecer para cor, deslizar ou varrer. <b>Aplicar e reiniciar o OBS</b> leva uns 15 segundos; faça antes do culto.</li>
+</ul>
+
+<h3><span class="aba">Áudio</span> mixer, filtros e fone</h3>
+<ul>
+  <li>Volume e mudo de cada fonte. <b>Fone</b>: o que o operador ouve no fone do PC (nada, só o operador, ou fone e transmissão).</li>
+  <li><b>🎤 Voz de pregação</b> liga a cadeia recomendada. Cada filtro pode ser ligado e desligado; portão e compressor têm força leve, médio e forte; <b>ganho</b> de −20 a +20 dB.</li>
+</ul>
+
+<h3><span class="aba">Destinos</span> YouTube, Instagram e outros</h3>
+<ul>
+  <li><b>YouTube</b>: chave de transmissão do YouTube Studio, formato "Mesmo vídeo do OBS".</li>
+  <li><b>Instagram</b>: no computador, Instagram → Criar → Transmissão ao vivo → Software de transmissão. Copie o URL e a chave para o destino. Formato "Recorte vertical 9:16" e ajuste a posição do recorte. A chave muda a cada live.</li>
+  <li>Os selos no alto mostram cada destino no ar. Se um cair, só ele reconecta.</li>
+</ul>
+
+<h3><span class="aba">Holyrics</span> letra do telão na live</h3>
+<ul>
+  <li>No PC do Holyrics: Menu arquivo → Configurações → <b>API Server</b> → ativar para a rede local; em <b>gerenciar permissões</b>, criar um token com a permissão <b>GetCurrentPresentation</b>.</li>
+  <li>Na mesa: IP, porta (8091) e token → <b>Testar conexão</b> → <b>Salvar e conectar</b>. <b>Mostrar a letra na live</b> liga e desliga. Aparência: posição, tamanho, fundo.</li>
+</ul>
+
+<h3><span class="aba">Replay</span> rever um momento</h3>
+<ul>
+  <li>O OBS guarda os últimos 30 segundos. <b>Salvar</b> (ou tecla <kbd>R</kbd>) grava o trecho; <b>Exibir</b> coloca no ar e volta sozinho para a cena anterior. Velocidade normal ou câmera lenta.</li>
+  <li>Se a mesa avisar que o replay não está ativado no OBS: com o OBS fechado, clique em <b>Ativar o replay no OBS e abrir o OBS</b>.</li>
+</ul>
+
+<h3><span class="aba">Tradução</span> para quem não entende português</h3>
+<ul>
+  <li><b>Serviço de tradução</b>: Claude (precisa de chave da Anthropic, melhor qualidade), DeepL (plano gratuito), Google (sem chave, sem garantia) ou nenhum (só transcreve). <b>Testar tradução</b> confere.</li>
+  <li><b>Idiomas oferecidos</b>: os que vão aparecer no celular dos membros.</li>
+  <li><b>Abrir o ouvinte neste PC</b> abre uma janela do Edge ou Chrome que escuta o microfone. Antes, escolha o microfone certo em Configurações do Windows → Som → Entrada. Deixe a janela aberta o culto inteiro.</li>
+  <li>Opcional: mostrar a tradução como legenda na transmissão.</li>
+</ul>
+
+<h3><span class="aba">Config</span> OBS, qualidade e nomes</h3>
+<ul>
+  <li>Conexão com o OBS (abrir, fechar, reiniciar; OBS escondido ou com janela), <b>qualidade da transmissão</b> e <b>nomes das câmeras</b>.</li>
+</ul>
+
+<h2 id="atalhos">7. Atalhos de teclado (com a mesa aberta)</h2>
+<table>
+  <tr><th>Tecla</th><th>O que faz</th></tr>
+  <tr><td><kbd>1</kbd> a <kbd>9</kbd></td><td>Corta para a cena de número correspondente (com a transição padrão)</td></tr>
+  <tr><td><kbd>Shift</kbd> + <kbd>1</kbd>…<kbd>9</kbd> ou <kbd>Shift</kbd> + clique</td><td>Corta seco, sem transição</td></tr>
+  <tr><td><kbd>Espaço</kbd> ou <kbd>Page Down</kbd></td><td>Próximo item do roteiro</td></tr>
+  <tr><td><kbd>Page Up</kbd></td><td>Item anterior do roteiro</td></tr>
+  <tr><td><kbd>R</kbd></td><td>Salva um replay dos últimos segundos</td></tr>
+</table>
+<p>No <b>multiview</b> (botão no alto da mesa), as teclas <kbd>1</kbd> a <kbd>9</kbd> e o clique também cortam. Use <kbd>F11</kbd> para tela cheia num segundo monitor.</p>
+
+<h2 id="membros">8. Tradução ao vivo: instruções para os membros</h2>
+<ol>
+  <li>Conecte o celular no Wi‑Fi da igreja.</li>
+  <li>Leia o QR code <b>"Tradução"</b> (aba Tradução da mesa ou página inicial do programa). Aceite o aviso do certificado na primeira vez.</li>
+  <li>Escolha o idioma no alto da página. O texto aparece em letra grande; <b>A-</b> e <b>A+</b> mudam o tamanho.</li>
+  <li>Toque em <b>🔊</b> para ouvir a tradução em voz pelo fone de ouvido.</li>
+</ol>
+<p>A tradução chega uns 2 a 5 segundos depois da fala, frase a frase.</p>
+
+<h2 id="problemas">9. Problemas comuns</h2>
+<table>
+  <tr><th>O que acontece</th><th>O que fazer</th></tr>
+  <tr><td>O selo <b>OBS</b> fica vermelho</td><td>Aba Config: se o OBS está fechado, <b>Abrir OBS</b>; se o WebSocket está desligado, <b>Habilitar WebSocket</b> e reabra o OBS.</td></tr>
+  <tr><td>O celular diz que o site não é seguro</td><td>É normal na primeira vez: <b>Avançado → Continuar</b> (iPhone: <b>Mostrar detalhes → Visitar este site</b>).</td></tr>
+  <tr><td>O celular não acha o PC</td><td>Celular e PC no mesmo Wi‑Fi (não o de visitantes); firewall do Windows permitido em redes privadas.</td></tr>
+  <tr><td>A imagem do celular congela</td><td>Aba Câmeras → <b>Reiniciar vídeo</b>. Se cair muito, aproxime o roteador ou use 540p.</td></tr>
+  <tr><td>Transmissão travando ou com atraso</td><td>Config → qualidade <b>PC fraco (720p)</b>; nos celulares, 720p/30 fps; feche o multiview durante a live.</td></tr>
+  <tr><td>Um destino fica "reconectando"</td><td><b>Ver log</b> no destino: chave errada ou vencida (Instagram muda a cada live) ou internet sem banda para dois envios.</td></tr>
+  <tr><td>Microfone picotando ou cortando o começo das palavras</td><td>Aba Áudio: portão em "leve" ou desligado.</td></tr>
+  <tr><td>Voz abafada ou robótica</td><td>Aba Áudio: desligue a redução de ruído daquele microfone.</td></tr>
+  <tr><td>A logo ou o QR não aparecem</td><td>A cena precisa ter o Overlay (<b>Configurar OBS automaticamente</b>). Veja o selo "NA TELA" na aba Gráficos.</td></tr>
+  <tr><td>O vídeo toca sem som</td><td>Volume na aba Vídeos; na aba Áudio, a fonte "Player (vídeo)" não pode estar em mudo.</td></tr>
+  <tr><td>A transição nova não aparece</td><td>O OBS precisa fechar e reabrir. Se não fechou, feche pela bandeja e abra pela mesa.</td></tr>
+  <tr><td>Holyrics em "erro"</td><td>A mensagem diz o motivo: API Server desligado ou IP errado; token errado ou sem a permissão GetCurrentPresentation; firewall no PC do Holyrics.</td></tr>
+  <tr><td>O ouvinte diz "navegador sem reconhecimento de voz"</td><td>Abra <code>http://localhost:8080/ouvir</code> no Edge ou no Chrome.</td></tr>
+  <tr><td>"Salvar replay" falha</td><td>Com o OBS fechado, aba Replay → <b>Ativar o replay no OBS e abrir o OBS</b>.</td></tr>
+</table>
+<p>O ícone da bandeja tem <b>Abrir pasta de dados</b>: ali ficam o roteiro, os modelos, a configuração e o arquivo de log, útil para pedir ajuda.</p>
+
+<h2 id="enderecos">10. Endereços úteis (no PC da transmissão)</h2>
+<table>
+  <tr><th>Endereço</th><th>Para quê</th></tr>
+  <tr><td><code>http://localhost:8080/</code></td><td>Página inicial com os QR codes</td></tr>
+  <tr><td><code>http://localhost:8080/mesa</code></td><td>A mesa (no tablet: <code>http://IP-DO-PC:8080/mesa</code>)</td></tr>
+  <tr><td><code>http://localhost:8080/multiview</code></td><td>Multiview para o segundo monitor</td></tr>
+  <tr><td><code>https://IP-DO-PC:8443/cam</code></td><td>Celular como câmera (é o QR code)</td></tr>
+  <tr><td><code>https://IP-DO-PC:8443/traducao</code></td><td>Tradução no celular dos membros (é o QR code "Tradução")</td></tr>
+  <tr><td><code>http://localhost:8080/ouvir</code></td><td>Ouvinte da tradução (Edge ou Chrome)</td></tr>
+  <tr><td><code>http://localhost:8080/manual</code></td><td>Este manual</td></tr>
+</table>
+
+<footer>Transmissão Igreja · manual da versão 1.11 · O botão no alto desta página imprime ou salva em PDF.</footer>
+</div>
+</body>
+</html>
