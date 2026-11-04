@@ -56,6 +56,7 @@ const DEFAULT_CONFIG = {
     estilo: { posicao: 'inferior', tamanho: 'M', fundo: 'faixa', maiusculas: false, titulo: false },
   },
   replay: { auto: true, segundos: 30, velocidade: 100, cena: 'Replay', fonte: 'Replay (vídeo)' },
+  player: { cena: 'Vídeo', fonte: 'Player (vídeo)' },
   traducao: {
     ativo: false, idiomaOrigem: 'pt-BR', idiomas: ['en'],
     provedor: 'anthropic', chave: '', modelo: 'claude-opus-5-5',
@@ -83,6 +84,7 @@ config.relay = Object.assign({}, DEFAULT_CONFIG.relay, config.relay || {});
 config.holyrics = Object.assign({}, DEFAULT_CONFIG.holyrics, config.holyrics || {});
 config.holyrics.estilo = Object.assign({}, DEFAULT_CONFIG.holyrics.estilo, config.holyrics.estilo || {});
 config.replay = Object.assign({}, DEFAULT_CONFIG.replay, config.replay || {});
+config.player = Object.assign({}, DEFAULT_CONFIG.player, config.player || {});
 config.traducao = Object.assign({}, DEFAULT_CONFIG.traducao, config.traducao || {});
 config.graficos = config.graficos || {};
 for (const k of Object.keys(DEFAULT_CONFIG.graficos)) config.graficos[k] = Object.assign({}, DEFAULT_CONFIG.graficos[k], config.graficos[k] || {});
@@ -239,6 +241,7 @@ async function handleApi(req, res, p) {
   try {
     if (p === '/api/transicoes/arquivo' && req.method === 'POST') return receberArquivo(req, res, { pasta: 'estingers', exts: ESTINGER_EXT, max: 500e6, rotulo: 'um vídeo' });
     if (p === '/api/imagens' && req.method === 'POST') return receberArquivo(req, res, { pasta: 'imagens', exts: IMAGEM_EXT, max: 25e6, rotulo: 'uma imagem' });
+    if (p === '/api/videos' && req.method === 'POST') return receberArquivo(req, res, { pasta: 'videos', exts: ESTINGER_EXT, max: 4e9, rotulo: 'um vídeo' });
     if (p === '/api/imagens' && req.method === 'GET') return sendJson(res, { imagens: listarImagens() });
     if (p === '/api/imagens' && req.method === 'DELETE') {
       const body = await readBody(req);
@@ -350,6 +353,28 @@ async function handleApi(req, res, p) {
         const id = decodeURIComponent(m[2]);
         if (m[1] === 'restart') { relay.restartDest(id); return sendJson(res, { ok: true }); }
         return sendJson(res, { lines: relay.logOf(id) });
+      }
+    }
+    // Player de vídeos (playlist numa fonte de mídia do OBS)
+    if (p === '/api/player' && req.method === 'GET') return sendJson(res, player.state());
+    if (p === '/api/player/itens') {
+      const body = await readBody(req);
+      try {
+        if (req.method === 'POST') return sendJson(res, { ok: true, item: player.adicionar(body), state: player.state() });
+        if (req.method === 'DELETE') return sendJson(res, { ok: player.remover(body.id), state: player.state() });
+        if (req.method === 'PUT') return sendJson(res, { ok: player.mover(body.id, body.dir), state: player.state() });
+      } catch (e) { return sendJson(res, { error: e.message }, 400); }
+    }
+    if (p === '/api/player/opcoes' && req.method === 'PUT') { await player.setOpcoes(await readBody(req)); return sendJson(res, { ok: true, state: player.state() }); }
+    {
+      const m = p.match(/^\/api\/player\/(tocar|pausar|continuar|parar|proximo)$/);
+      if (m && req.method === 'POST') {
+        const body = await readBody(req);
+        try {
+          if (m[1] === 'tocar') return sendJson(res, { ok: true, item: await player.tocar(body.id) });
+          await player[m[1]]();
+          return sendJson(res, { ok: true });
+        } catch (e) { return sendJson(res, { error: String(e.message || e) }, 400); }
       }
     }
     // Replay instantâneo (buffer de replay do OBS)
@@ -577,6 +602,7 @@ function onWsMessage(c, raw) {
         wsSend(c.ws, { type: 'relay', state: relay.state() });
         wsSend(c.ws, { type: 'holyrics', state: holyrics.state() });
         wsSend(c.ws, { type: 'replay', state: replay.state() });
+        wsSend(c.ws, { type: 'player', state: player.state() });
         wsSend(c.ws, { type: 'traducao', state: traducao.state() });
       } else if (c.role === 'overlay') {
         wsSend(c.ws, { type: 'overlay', overlay });
@@ -782,9 +808,14 @@ syncLyrics();
 const { Replay } = require('./replay');
 const replay = new Replay(obs, () => config.replay);
 replay.on('state', (state) => broadcast('mesa', { type: 'replay', state }));
-obs.onConnected = () => replay.onConnected().catch((e) => console.warn('[replay]', e.message));
-obs.onDisconnected = () => replay.onDisconnected();
-obs.onEvent = (tipo, d) => replay.onEvent(tipo, d);
+// ---------------------------------------------------------------- Player de vídeos
+const { Player } = require('./player');
+const player = new Player(obs, () => config.player, path.join(DATA, 'playlist.json'));
+player.on('state', (state) => broadcast('mesa', { type: 'player', state }));
+
+obs.onConnected = () => { replay.onConnected().catch((e) => console.warn('[replay]', e.message)); player.onConnected(); };
+obs.onDisconnected = () => { replay.onDisconnected(); player.onDisconnected(); };
+obs.onEvent = (tipo, d) => { replay.onEvent(tipo, d); player.onEvent(tipo, d); };
 if (obs.connected) obs.onConnected();
 
 // ---------------------------------------------------------------- Tradução ao vivo

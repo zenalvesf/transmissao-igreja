@@ -59,6 +59,7 @@
       <button data-tab="roteiro" class="active">📋 Roteiro</button>
       <button data-tab="legendas">🔤 Legendas</button>
       <button data-tab="graficos">🎨 Gráficos</button>
+      <button data-tab="videos">🎬 Vídeos</button>
       <button data-tab="cameras">📱 Câmeras</button>
       <button data-tab="fontes">🎥 Fontes</button>
       <button data-tab="telas">🧩 Telas</button>
@@ -103,6 +104,8 @@
                 <option value="cartaoOff">Cartão em tela cheia: ocultar</option>
                 <option value="qr">QR de oferta: mostrar</option>
                 <option value="qrOff">QR de oferta: ocultar</option>
+                <option value="video">Vídeo: tocar</option>
+                <option value="videoStop">Vídeo: parar e voltar</option>
               </select>
             </div>
           </div>
@@ -173,6 +176,35 @@
       </div>
 
       <button id="clearAll" class="danger wide">Limpar todas as legendas da tela</button>
+    </div>
+
+    <!-- Vídeos: player com playlist -->
+    <div class="tab" id="tab-videos">
+      <div class="card">
+        <div class="row between"><h2 style="margin:0">Tocando agora</h2><span class="badge" id="plState">parado</span></div>
+        <div id="plAgora" class="pl-agora"><span class="muted">Nenhum vídeo tocando.</span></div>
+        <div class="pl-prog"><i id="plBar"></i></div>
+        <div class="row between muted" style="font-size:12px"><span id="plTempo">0:00 / 0:00</span><span id="plAnterior"></span></div>
+        <div class="row" style="gap:8px;flex-wrap:wrap;margin-top:8px">
+          <button id="plPause" class="primary grow">⏸ Pausar</button>
+          <button id="plNext">⏭ Próximo</button>
+          <button id="plStop" class="danger">⏹ Parar e voltar</button>
+        </div>
+        <div class="grid2" style="margin-top:10px">
+          <div class="field"><label>Ao terminar o vídeo</label><select id="plFim"><option value="voltar">Voltar para a cena anterior</option><option value="proximo">Tocar o próximo da lista</option><option value="repetir">Repetir a lista sem parar</option></select></div>
+          <div class="field"><label>Volume: <b id="plVolVal">100</b>%</label><input id="plVol" type="range" min="0" max="100" value="100"></div>
+        </div>
+        <label class="switch"><input type="checkbox" id="plMics"> Silenciar os microfones enquanto o vídeo toca</label>
+      </div>
+
+      <div class="card">
+        <div class="row between"><h2 style="margin:0">Lista de vídeos</h2><button id="plUpload" class="small">⬆ Enviar vídeo</button></div>
+        <input id="plArquivo" type="file" accept="video/*,.mkv" multiple style="display:none">
+        <p class="muted" style="margin-top:0">Vídeos de avisos, abertura, testemunhos. Clique em ▶ para colocar no ar: a mesa cria a cena "Vídeo" no OBS, corta para ela e volta sozinha quando acaba.</p>
+        <div id="plLista" class="rp-lista"></div>
+        <div class="row" style="gap:8px;margin-top:10px"><input id="plCaminho" class="grow" placeholder="ou o caminho de um vídeo já no PC: D:\videos\aviso.mp4"><button id="plAddCaminho">Adicionar</button></div>
+        <p class="muted" id="plMsg" style="font-size:12px;margin:8px 0 0">Os vídeos enviados ficam na pasta data/videos. Para vídeos grandes, use o caminho.</p>
+      </div>
     </div>
 
     <!-- Gráficos: tema, logo, QR, relógio, cartão -->

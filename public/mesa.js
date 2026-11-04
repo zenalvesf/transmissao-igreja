@@ -8,6 +8,7 @@
     obs: false, scenes: [], program: '', transitions: [], transition: '', transitionsFull: [], transitionDur: 300, transitionFixed: false,
     tsInfo: null, tsPend: { adicionar: [], remover: [] }, // transições na coleção do OBS e mudanças ainda não aplicadas
     imagens: [], // imagens enviadas (logo, fundos)
+    player: null, // player de vídeos (playlist)
     streaming: false, recording: false, lastStreamBytes: 0, lastStreamTs: 0,
     overlay: {}, roteiro: { itens: [], atual: -1 }, presets: { legendas: [], versiculos: [], avisos: [] },
     cams: [], config: null, info: null, editing: false, audioInputs: [],
@@ -62,6 +63,7 @@
       case 'relay': S.relay = m.state; renderRelay(); break;
       case 'holyrics': S.holyrics = m.state; renderHoly(); break;
       case 'replay': S.replay = m.state; renderReplay(); break;
+      case 'player': S.player = m.state; renderPlayer(); break;
       case 'traducao': S.traducao = m.state; renderTr(); break;
       case 'traducaoParcial': S.trParcial = m.texto || ''; renderTrAgora(); break;
       default: break;
@@ -330,7 +332,7 @@
   }
   function acaoLabel(a) {
     if (!a || a.tipo === 'none') return null;
-    const map = { cartao: '🖼️ cartão: ' + (a.cartao || ''), cartaoOff: '🖼️ cartão: ocultar', qr: '▦ QR de oferta', qrOff: '▦ QR: ocultar', clear: '🧹 limpar legendas', lower: '🔤 ' + (a.title || ''), verse: '📖 ' + (a.ref || ''), title: '🏷️ ' + (a.text || ''), ticker: '📣 aviso', countdown: '⏱ contagem ' + (a.minutes || 0) + ' min', letra: '🎵 letra do Holyrics', letraOff: '🎵 letra: ocultar' };
+    const map = { video: '🎬 vídeo: ' + (a.videoNome || ''), videoStop: '🎬 vídeo: parar', cartao: '🖼️ cartão: ' + (a.cartao || ''), cartaoOff: '🖼️ cartão: ocultar', qr: '▦ QR de oferta', qrOff: '▦ QR: ocultar', clear: '🧹 limpar legendas', lower: '🔤 ' + (a.title || ''), verse: '📖 ' + (a.ref || ''), title: '🏷️ ' + (a.text || ''), ticker: '📣 aviso', countdown: '⏱ contagem ' + (a.minutes || 0) + ' min', letra: '🎵 letra do Holyrics', letraOff: '🎵 letra: ocultar' };
     return map[a.tipo] || a.tipo;
   }
   function move(i, d) { const it = S.roteiro.itens; const j = i + d; if (j < 0 || j >= it.length) return; [it[i], it[j]] = [it[j], it[i]]; if (S.roteiro.atual === i) S.roteiro.atual = j; else if (S.roteiro.atual === j) S.roteiro.atual = i; saveRoteiro(); }
@@ -355,6 +357,8 @@
     if (a.tipo === 'cartaoOff') return overlayPatch({ cartao: { visible: false } });
     if (a.tipo === 'qr') return grSet({ qr: { visible: true } });
     if (a.tipo === 'qrOff') return grSet({ qr: { visible: false } });
+    if (a.tipo === 'video') return plPost('tocar', { id: a.video });
+    if (a.tipo === 'videoStop') return plPost('parar');
   }
   $('#btnNext').addEventListener('click', () => nextItem(1));
   $('#btnPrev').addEventListener('click', () => nextItem(-1));
@@ -367,6 +371,11 @@
     if (t === 'verse') { f('riRef', 'Referência'); f('riText', 'Texto', true); }
     if (t === 'title' || t === 'ticker') f('riText', 'Texto');
     if (t === 'countdown') { f('riMinutes', 'Minutos'); f('riMessage', 'Mensagem'); }
+    if (t === 'video') {
+      const sel = el('select', { id: 'riVideo' });
+      for (const v of ((S.player && S.player.itens) || [])) sel.append(el('option', { value: v.id, text: v.nome }));
+      box.append(el('div', { class: 'field' }, [el('label', { text: sel.options.length ? 'Vídeo da lista (aba Vídeos)' : 'Adicione vídeos na aba Vídeos primeiro' }), sel]));
+    }
     if (t === 'cartao') {
       const sel = el('select', { id: 'riCartao' });
       for (const c of (S.presets.cartoes || [])) sel.append(el('option', { value: c.titulo || c.imagem, text: c.titulo || c.imagem }));
@@ -378,6 +387,7 @@
     const tipo = $('#riAcao').value;
     const v = (id) => ($('#' + id) ? $('#' + id).value : '');
     const acao = { tipo, title: v('riTitle'), subtitle: v('riSubtitle'), ref: v('riRef'), text: v('riText'), minutes: Number(v('riMinutes') || 0), message: v('riMessage'), cartao: v('riCartao') };
+    if (tipo === 'video') { acao.video = Number(v('riVideo')); const it = ((S.player && S.player.itens) || []).find((x) => x.id === acao.video); acao.videoNome = it ? it.nome : ''; if (!it) return toast('Escolha um vídeo da lista', true); }
     const item = { titulo, cena: $('#riCena').value, acao };
     if ($('#riTrans').value) { item.transicao = $('#riTrans').value; if (Number($('#riTransDur').value)) item.transicaoDur = Number($('#riTransDur').value); }
     S.roteiro.itens.push(item);
@@ -983,6 +993,76 @@
       $('#tlNome').value = '';
       setTimeout(refreshTelas, 600);
     } catch (e) { msg.textContent = ''; toast('Não criou: ' + e.message, true); }
+  });
+
+  // ---- Player de vídeos (playlist numa fonte de mídia do OBS)
+  async function plPost(acao, body) {
+    try {
+      const r = await (await fetch('/api/player/' + acao, { method: 'POST', body: JSON.stringify(body || {}) })).json();
+      if (r.error) throw new Error(r.error);
+      return r;
+    } catch (e) { toast('Vídeo: ' + e.message, true); }
+  }
+  function fmtTempo(s) { s = Math.max(0, Math.round(Number(s) || 0) / 1000); const m = Math.floor(s / 60), x = Math.floor(s % 60); return m + ':' + String(x).padStart(2, '0'); }
+  let plVolEditing = false, plVolTimer = null;
+  function renderPlayer() {
+    const st = S.player; if (!st) return;
+    const b = $('#plState');
+    if (st.tocando) { b.className = 'badge ' + (st.pausado ? 'warn' : 'live'); b.textContent = st.pausado ? 'PAUSADO' : 'NO AR'; }
+    else { b.className = 'badge'; b.textContent = st.conectado ? 'parado' : 'OBS desconectado'; }
+    const agora = $('#plAgora'); agora.innerHTML = '';
+    if (st.tocando && st.item) agora.append(el('b', { text: st.item.nome }), el('div', { class: 'muted', style: 'font-size:12px', text: st.item.arquivo }));
+    else agora.append(el('span', { class: 'muted', text: st.itens.length ? 'Nenhum vídeo tocando. Clique em ▶ num vídeo da lista.' : 'Nenhum vídeo tocando.' }));
+    const dur = st.status.duracao || 0, cur = st.status.cursor || 0;
+    $('#plBar').style.width = (st.tocando && dur ? Math.min(100, cur / dur * 100) : 0) + '%';
+    $('#plTempo').textContent = st.tocando ? `${fmtTempo(cur)} / ${fmtTempo(dur)}` : '0:00 / 0:00';
+    $('#plAnterior').textContent = st.tocando && st.cenaAnterior ? 'volta para: ' + st.cenaAnterior : '';
+    $('#plPause').textContent = st.tocando && !st.pausado ? '⏸ Pausar' : '▶ ' + (st.tocando ? 'Continuar' : 'Tocar');
+    $('#plPause').disabled = !st.conectado || (!st.tocando && !st.itens.length);
+    $('#plNext').disabled = !st.conectado || st.itens.length < 2;
+    $('#plStop').disabled = !st.tocando;
+    $('#plFim').value = st.aoTerminar; $('#plMics').checked = !!st.silenciarMics;
+    if (!plVolEditing) { $('#plVol').value = st.volume; $('#plVolVal').textContent = st.volume; }
+    const box = $('#plLista'); box.innerHTML = '';
+    st.itens.forEach((it, i) => {
+      const onair = st.tocando && st.atual === i;
+      box.append(el('div', { class: 'rp-item' + (onair ? ' onair' : '') }, [
+        el('button', { class: 'small' + (onair ? ' primary' : ''), text: onair ? (st.pausado ? '⏸' : '▶ NO AR') : '▶', title: 'Tocar este vídeo', onclick: () => plPost('tocar', { id: it.id }) }),
+        el('span', { class: 'nome' }, [el('b', { text: it.nome }), ' ', el('span', { class: 'muted', style: 'font-size:12px', text: it.origem === 'upload' ? '· enviado' : '· ' + it.arquivo })]),
+        el('button', { class: 'small ghost', text: '▲', onclick: () => fetch('/api/player/itens', { method: 'PUT', body: JSON.stringify({ id: it.id, dir: -1 }) }) }),
+        el('button', { class: 'small ghost', text: '▼', onclick: () => fetch('/api/player/itens', { method: 'PUT', body: JSON.stringify({ id: it.id, dir: 1 }) }) }),
+        el('button', { class: 'small ghost danger', text: '✕', title: 'Tirar da lista', onclick: () => { if (confirm(`Tirar "${it.nome}" da lista?` + (it.origem === 'upload' ? ' O arquivo enviado será apagado.' : ''))) fetch('/api/player/itens', { method: 'DELETE', body: JSON.stringify({ id: it.id }) }); } }),
+      ]));
+    });
+    if (!st.itens.length) box.append(el('p', { class: 'muted', text: 'Lista vazia. Envie um vídeo ou informe o caminho de um que já está no PC.' }));
+  }
+  $('#plPause').addEventListener('click', () => { const st = S.player; if (!st) return; plPost(st.tocando && !st.pausado ? 'pausar' : 'continuar'); });
+  $('#plNext').addEventListener('click', () => plPost('proximo'));
+  $('#plStop').addEventListener('click', () => plPost('parar'));
+  $('#plFim').addEventListener('change', () => fetch('/api/player/opcoes', { method: 'PUT', body: JSON.stringify({ aoTerminar: $('#plFim').value }) }));
+  $('#plMics').addEventListener('change', () => fetch('/api/player/opcoes', { method: 'PUT', body: JSON.stringify({ silenciarMics: $('#plMics').checked }) }));
+  $('#plVol').addEventListener('input', () => { plVolEditing = true; $('#plVolVal').textContent = $('#plVol').value; clearTimeout(plVolTimer); plVolTimer = setTimeout(() => { plVolEditing = false; fetch('/api/player/opcoes', { method: 'PUT', body: JSON.stringify({ volume: Number($('#plVol').value) }) }); }, 250); });
+  $('#plUpload').addEventListener('click', () => $('#plArquivo').click());
+  $('#plArquivo').addEventListener('change', async () => {
+    const msg = $('#plMsg');
+    for (const f of $('#plArquivo').files) {
+      try {
+        msg.textContent = `Enviando ${f.name} (${(f.size / 1e6).toFixed(0)} MB)… não feche a mesa.`;
+        const r = await (await fetch('/api/videos', { method: 'POST', headers: { 'x-nome': encodeURIComponent(f.name), 'Content-Type': 'application/octet-stream' }, body: f })).json();
+        if (r.error) throw new Error(r.error);
+        const a = await (await fetch('/api/player/itens', { method: 'POST', body: JSON.stringify({ nome: f.name.replace(/\.[^.]+$/, ''), arquivo: r.arquivo, origem: 'upload' }) })).json();
+        if (a.error) throw new Error(a.error);
+        toast(`Na lista: ${a.item.nome}`);
+      } catch (e) { toast('Não enviou ' + f.name + ': ' + e.message, true); }
+    }
+    msg.textContent = 'Os vídeos enviados ficam na pasta data/videos. Para vídeos grandes, use o caminho.';
+    $('#plArquivo').value = '';
+  });
+  $('#plAddCaminho').addEventListener('click', async () => {
+    const caminho = $('#plCaminho').value.trim(); if (!caminho) return;
+    const a = await (await fetch('/api/player/itens', { method: 'POST', body: JSON.stringify({ arquivo: caminho, origem: 'caminho' }) })).json();
+    if (a.error) return toast(a.error, true);
+    $('#plCaminho').value = ''; toast(`Na lista: ${a.item.nome}`);
   });
 
   // ---- Gráficos: tema, logo, QR, relógio (persistentes em config.graficos) e imagens

@@ -115,6 +115,17 @@ Desde a versão 1.5 o OBS é só o motor. O programa abre o OBS junto, minimizad
 - **Config → Conexão com o OBS:** "Abrir o OBS escondido" e "Abrir o OBS junto com este programa" podem ser desligados para quem prefere ver a janela do OBS. **Fechar OBS** fecha com cuidado (recusa se estiver transmitindo).
 - Para abrir a janela do OBS quando precisar de algo que a mesa ainda não faz: ícone do OBS na bandeja do Windows → Mostrar.
 
+## Player de vídeos (playlist)
+
+Aba **Vídeos** da mesa: vídeos de avisos, abertura, testemunhos e encerramento tocam na transmissão sem abrir o OBS.
+
+- **Lista:** **Enviar vídeo** copia o arquivo para `data/videos`; para vídeos grandes, cole o **caminho** de um arquivo que já está no PC (ex.: `D:\videos\aviso.mp4`). Reordene com ▲ ▼.
+- **Tocar:** ▶ num item cria no OBS a cena "Vídeo" com a fonte "Player (vídeo)", corta para ela e mostra o progresso na mesa. **Pausar**, **Próximo** e **Parar e voltar** (volta para a cena de antes).
+- **Ao terminar:** voltar para a cena anterior, tocar o próximo da lista ou repetir a lista sem parar (bom para o loop antes do culto).
+- **Volume** do vídeo e opção de **silenciar os microfones** enquanto ele toca (devolve ao parar).
+- **Roteiro:** ações "Vídeo: tocar" (escolhe um vídeo da lista) e "Vídeo: parar e voltar".
+- Se o operador cortar para outra cena no meio do vídeo, o player para sozinho.
+
 ## Gráficos: tema, logo, QR de oferta, relógio e cartão em tela cheia
 
 Tudo na aba **Gráficos** da mesa, e tudo vale na hora no overlay (a fonte de navegador do OBS):
@@ -211,6 +222,8 @@ transmissao-igreja/
 
 - **O celular diz que precisa de https.** Use o QR code, que já aponta para o endereço https. Se o IP do PC mudou, feche e abra o `iniciar.bat` de novo e apague a pasta `certs` para gerar um certificado com o IP novo.
 - **O OBS abriu com uma janela de "assistente de configuração automática".** Acontece só na primeira abertura do OBS num PC novo. Clique em Cancelar; depois use a qualidade da mesa.
+- **O vídeo toca sem som ou com som baixo.** Confira o volume na aba Vídeos e, no OBS, se a fonte "Player (vídeo)" não está silenciada no mixer (aba Áudio da mesa).
+- **O vídeo não aparece: tela preta na cena "Vídeo".** Formatos seguros: MP4 (H.264 + AAC) e WEBM. Vídeos muito pesados (4K, taxa de bits alta) travam em PC fraco: converta para 1080p antes.
 - **A logo ou o QR não aparecem na transmissão.** O overlay precisa estar na cena (botão "Configurar OBS automaticamente" na aba Câmeras coloca a cena "Overlay" em todas). Confira também o selo "NA TELA" ao lado de cada item na aba Gráficos: a logo só liga depois de escolher uma imagem, e o QR só com conteúdo preenchido.
 - **A transição nova não aparece depois de aplicar.** O OBS precisa fechar e abrir de novo; se ele não fechou (a mesa avisa), feche pelo ícone da bandeja do Windows e abra pela mesa. Se a coleção de cenas em uso no OBS for outra, a mesa mostra o nome da coleção no cartão "Transições na coleção do OBS".
 - **O estinger não fica transparente.** Só vídeos .webm (VP9 ou VP8 com canal alfa) ou .mov com alfa têm transparência; .mp4 sempre cobre a tela inteira, o que também funciona como transição.
