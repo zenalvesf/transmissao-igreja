@@ -54,6 +54,52 @@
   #title .text { font-size: 110px; font-weight: 800; line-height: 1.05; text-shadow: 0 8px 50px rgba(0,0,0,.7); }
   #title .line { width: 240px; height: 8px; background: var(--accent); margin: 28px auto 0; border-radius: 4px; }
 
+  /* ---- Estilos do tema (classico é o padrão acima) ---- */
+  body.estilo-moderno #lower .box, body.estilo-moderno #verse .box, body.estilo-moderno #lyrics .box, body.estilo-moderno #cartao .inner { border-radius: 0; backdrop-filter: none; background: rgba(8, 10, 14, .9); }
+  body.estilo-moderno #lower .bar { width: 16px; border-radius: 0; }
+  body.estilo-moderno #lower .title { text-transform: uppercase; letter-spacing: .04em; font-size: 40px; }
+  body.estilo-moderno #lower .subtitle { color: var(--accent); font-weight: 600; opacity: 1; }
+  body.estilo-moderno #ticker { border-top-width: 6px; }
+  body.estilo-moderno #title .line { width: 100%; height: 6px; }
+  body.estilo-arredondado #lower .bar { display: none; }
+  body.estilo-arredondado #lower .box { border-radius: 999px; padding: 18px 44px; border: 3px solid var(--accent); }
+  body.estilo-arredondado #verse .box { border-left: 0; border: 3px solid var(--accent); border-radius: 28px; }
+  body.estilo-arredondado #ticker { border-top: 0; margin: 0 24px 16px; border-radius: 999px; overflow: hidden; }
+  body.estilo-arredondado #ticker { transform: translateY(calc(100% + 24px)); } body.estilo-arredondado #ticker.show { transform: none; }
+  body.estilo-arredondado #ticker .label { border-radius: 999px 0 0 999px; }
+  body.estilo-arredondado #lyrics .box, body.estilo-arredondado #legenda .box { border-radius: 28px; }
+  body.estilo-arredondado #lyrics.faixa .box { border-radius: 0; }
+  /* legenda inferior centralizada */
+  body.lower-centro #lower { left: 50%; transform: translate(-50%, 60px); }
+  body.lower-centro #lower.show { transform: translate(-50%, 0); }
+  body.lower-centro #lower .box { text-align: center; }
+
+  /* ---- Cantos: logo, QR e relógio ---- */
+  .canto { position: absolute; display: flex; flex-direction: column; align-items: center; gap: 8px; opacity: 0; transition: opacity .4s; }
+  .canto.show { opacity: 1; }
+  .canto.esq-cima { left: 60px; top: 50px; } .canto.dir-cima { right: 60px; top: 50px; }
+  .canto.esq-baixo { left: 60px; bottom: 60px; } .canto.dir-baixo { right: 60px; bottom: 60px; }
+  #logo img { display: block; max-width: 100%; filter: drop-shadow(0 4px 14px rgba(0,0,0,.5)); }
+  #qr { background: #fff; color: #111; padding: 14px; border-radius: 14px; box-shadow: 0 8px 30px rgba(0,0,0,.45); }
+  #qr img { display: block; }
+  #qr .rotulo { font-size: 22px; font-weight: 700; text-align: center; max-width: 100%; color: #111; }
+  #qr .rotulo:empty { display: none; }
+  #relogio { font-size: 44px; font-weight: 700; font-variant-numeric: tabular-nums; background: var(--card); padding: 8px 22px; border-radius: 12px; backdrop-filter: blur(8px); border-bottom: 4px solid var(--accent); }
+
+  /* ---- Cartão em tela cheia ---- */
+  #cartao { position: absolute; inset: 0; opacity: 0; transition: opacity .5s; display: grid; place-items: center; }
+  #cartao.show { opacity: 1; }
+  #cartao .bg { position: absolute; inset: 0; background: linear-gradient(135deg, var(--accent), #0b0d12 70%); }
+  #cartao .bg.img { background-size: cover; background-position: center; }
+  #cartao .inner { position: relative; text-align: center; max-width: 80%; padding: 48px 72px; border-radius: 24px; background: rgba(8, 10, 14, .55); backdrop-filter: blur(10px); transform: translateY(24px); transition: transform .5s cubic-bezier(.2,.8,.2,1); }
+  #cartao.show .inner { transform: none; }
+  #cartao .inner:has(.titulo:empty):has(.texto:empty) { display: none; }
+  #cartao .titulo { font-size: 96px; font-weight: 800; line-height: 1.05; text-shadow: 0 6px 40px rgba(0,0,0,.6); }
+  #cartao .titulo:empty { display: none; }
+  #cartao .texto { font-size: 44px; line-height: 1.3; margin-top: 24px; white-space: pre-line; opacity: .95; }
+  #cartao .texto:empty { display: none; }
+  #cartao.long .titulo { font-size: 72px; } #cartao.long .texto { font-size: 36px; }
+
   /* ---- Legenda traduzida (tradução ao vivo) ---- */
   #legenda { position: absolute; left: 0; right: 0; bottom: 40px; display: flex; justify-content: center; opacity: 0; transition: opacity .3s, bottom .4s; padding: 0 80px; }
   #legenda.show { opacity: 1; }
@@ -91,6 +137,10 @@
   <div id="title"><div class="text"></div><div class="line"></div></div>
   <div id="lyrics" class="inferior faixa M"><div class="box"><div class="title"></div><div class="text"></div></div></div>
   <div id="legenda"><div class="box"></div></div>
+  <div id="cartao"><div class="bg"></div><div class="inner"><div class="titulo"></div><div class="texto"></div></div></div>
+  <div id="logo" class="canto dir-cima"><img alt=""></div>
+  <div id="qr" class="canto dir-baixo"><img alt="QR"><div class="rotulo"></div></div>
+  <div id="relogio" class="canto esq-cima">00:00</div>
 </div>
 <script src="/common.js"></script>
 <script>
@@ -111,10 +161,45 @@
   }
   fitScale(); window.addEventListener('resize', fitScale);
 
-  const lower = $('#lower'), verse = $('#verse'), ticker = $('#ticker'), countdown = $('#countdown'), title = $('#title'), lyrics = $('#lyrics'), legenda = $('#legenda');
+  const lower = $('#lower'), verse = $('#verse'), ticker = $('#ticker'), countdown = $('#countdown'), title = $('#title'), lyrics = $('#lyrics'), legenda = $('#legenda'), cartao = $('#cartao'), logo = $('#logo'), qr = $('#qr'), relogio = $('#relogio');
+  let relogioCfg = { visible: false, formato: '24h' }, qrTexto = '', qrTam = 0;
+  function canto(elm, c) { elm.className = 'canto ' + (['esq-cima', 'dir-cima', 'esq-baixo', 'dir-baixo'].includes(c) ? c : 'dir-cima') + (elm.classList.contains('show') ? ' show' : ''); }
   let cd = { visible: false, target: 0, message: '' };
 
   function apply(o) {
+    if (o.tema) { // cor, fonte e estilo vindos da mesa; a URL (?accent= / ?font=) ainda manda se foi usada
+      const t = o.tema;
+      if (!params.get('accent') && t.cor) document.documentElement.style.setProperty('--accent', t.cor);
+      if (!params.get('font') && t.fonte) document.documentElement.style.setProperty('--font', `"${t.fonte}", "Segoe UI", system-ui, sans-serif`);
+      document.body.classList.toggle('estilo-moderno', t.estilo === 'moderno');
+      document.body.classList.toggle('estilo-arredondado', t.estilo === 'arredondado');
+      document.body.classList.toggle('lower-centro', t.lowerPos === 'centro');
+    }
+    if (o.logo) {
+      const l = o.logo, img = $('img', logo);
+      if (l.url && img.getAttribute('src') !== l.url) img.src = l.url;
+      img.style.width = (l.tamanho || 160) + 'px'; logo.style.opacity = '';
+      img.style.opacity = (l.opacidade || 85) / 100;
+      canto(logo, l.canto); logo.classList.toggle('show', !!(l.visible && l.url));
+    }
+    if (o.qr) {
+      const q = o.qr, img = $('img', qr), tam = q.tamanho || 220;
+      if (q.texto && (q.texto !== qrTexto || tam !== qrTam)) { img.src = '/qr.svg?text=' + encodeURIComponent(q.texto); qrTexto = q.texto; qrTam = tam; }
+      img.style.width = img.style.height = tam + 'px'; $('.rotulo', qr).textContent = q.rotulo || ''; $('.rotulo', qr).style.maxWidth = tam + 'px';
+      canto(qr, q.canto); qr.classList.toggle('show', !!(q.visible && q.texto));
+    }
+    if (o.relogio) { relogioCfg = o.relogio; canto(relogio, o.relogio.canto); relogio.classList.toggle('show', !!o.relogio.visible); tickRelogio(); }
+    if (o.cartao) {
+      const c = o.cartao;
+      if (c.visible) {
+        $('.titulo', cartao).textContent = c.titulo || ''; $('.texto', cartao).textContent = c.texto || '';
+        const bg = $('.bg', cartao);
+        if (c.imagem) bg.style.background = `url("${c.imagem}") center / cover no-repeat`;
+        else bg.style.background = c.cor ? `linear-gradient(135deg, ${c.cor}, #0b0d12 75%)` : '';
+        cartao.classList.toggle('long', ((c.titulo || '').length > 40) || ((c.texto || '').length > 160));
+      }
+      cartao.classList.toggle('show', !!c.visible);
+    }
     if (o.lowerThird) {
       const lt = o.lowerThird;
       if (lt.visible) { $('.title', lower).textContent = lt.title || ''; $('.subtitle', lower).textContent = lt.subtitle || ''; }
@@ -165,6 +250,13 @@
     $('.time', countdown).textContent = h ? `${h}:${pad(m)}:${pad(sec)}` : `${pad(m)}:${pad(sec)}`;
   }
   setInterval(tick, 250);
+  function tickRelogio() {
+    if (!relogioCfg.visible) return;
+    const d = new Date(); let h = d.getHours(); const m = String(d.getMinutes()).padStart(2, '0');
+    if (relogioCfg.formato === '12h') { const ampm = h >= 12 ? 'PM' : 'AM'; h = h % 12 || 12; relogio.textContent = `${h}:${m} ${ampm}`; }
+    else relogio.textContent = `${String(h).padStart(2, '0')}:${m}`;
+  }
+  setInterval(tickRelogio, 1000);
 
   new Hub({ role: 'overlay' }, (m) => { if (m.type === 'overlay') apply(m.overlay); });
 })();

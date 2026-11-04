@@ -115,6 +115,17 @@ Desde a versão 1.5 o OBS é só o motor. O programa abre o OBS junto, minimizad
 - **Config → Conexão com o OBS:** "Abrir o OBS escondido" e "Abrir o OBS junto com este programa" podem ser desligados para quem prefere ver a janela do OBS. **Fechar OBS** fecha com cuidado (recusa se estiver transmitindo).
 - Para abrir a janela do OBS quando precisar de algo que a mesa ainda não faz: ícone do OBS na bandeja do Windows → Mostrar.
 
+## Gráficos: tema, logo, QR de oferta, relógio e cartão em tela cheia
+
+Tudo na aba **Gráficos** da mesa, e tudo vale na hora no overlay (a fonte de navegador do OBS):
+
+- **Cartão em tela cheia:** título, texto de várias linhas e, se quiser, uma imagem de fundo (vira um banner) ou só a cor. Use para avisos, programação da semana, boas-vindas e encerramento. **Salvar modelo** guarda o cartão para reutilizar com um clique e para o roteiro (ação "Cartão em tela cheia: mostrar").
+- **QR na tela:** cole a chave PIX, o "copia e cola" ou um endereço; escolha o rótulo, o canto e o tamanho. Ligue e desligue pela mesa ou pelo roteiro (ação "QR de oferta: mostrar/ocultar"). O QR é gerado pelo próprio programa, sem internet.
+- **Logo da igreja:** envie um PNG com fundo transparente em **Imagens**, escolha o canto, a largura e a opacidade. Fica como marca-d'água em todas as cenas que têm o overlay.
+- **Relógio:** hora atual num canto, 24 h ou 12 h.
+- **Tema das legendas:** cor da igreja, fonte (das instaladas no Windows), estilo (clássico, moderno ou arredondado) e legenda inferior à esquerda ou centralizada. Vale para legendas, versículo, aviso, título, letra e cartão. Os parâmetros antigos `?accent=` e `?font=` na URL do overlay continuam valendo e ganham do tema.
+- **Imagens:** envie PNG, JPG, GIF, WEBP ou SVG (até 25 MB). Ficam em `data/imagens` e aparecem como logo ou fundo de cartão.
+
 ## Transições e estinger
 
 - **Transição padrão:** no cartão Cenas (ao lado dos botões) e na aba **Transições**, escolha a transição e a duração em milissegundos. Vale na hora para botões, teclas e roteiro. **Shift + clique** numa cena (ou Shift + tecla 1 a 9) corta seco, sem transição.
@@ -192,6 +203,7 @@ transmissao-igreja/
 | `http://localhost:8080/overlay` | overlay de legendas. Opções: `?accent=ff9900` (cor da igreja), `?font=Georgia` |
 | `http://localhost:8080/multiview` | multiview: programa + cenas ao vivo, clique para cortar |
 | `http://localhost:8080/estingers/NOME` | vídeos de estinger enviados pela mesa |
+| `http://localhost:8080/imagens/NOME` | imagens enviadas pela mesa (logo, fundos de cartão) |
 | `http://localhost:8080/ouvir` | ouvinte da tradução: escuta o microfone (Edge ou Chrome). `?auto` começa a ouvir sozinho |
 | `https://IP:8443/traducao` | tradução ao vivo no celular de quem não entende português |
 
@@ -199,6 +211,7 @@ transmissao-igreja/
 
 - **O celular diz que precisa de https.** Use o QR code, que já aponta para o endereço https. Se o IP do PC mudou, feche e abra o `iniciar.bat` de novo e apague a pasta `certs` para gerar um certificado com o IP novo.
 - **O OBS abriu com uma janela de "assistente de configuração automática".** Acontece só na primeira abertura do OBS num PC novo. Clique em Cancelar; depois use a qualidade da mesa.
+- **A logo ou o QR não aparecem na transmissão.** O overlay precisa estar na cena (botão "Configurar OBS automaticamente" na aba Câmeras coloca a cena "Overlay" em todas). Confira também o selo "NA TELA" ao lado de cada item na aba Gráficos: a logo só liga depois de escolher uma imagem, e o QR só com conteúdo preenchido.
 - **A transição nova não aparece depois de aplicar.** O OBS precisa fechar e abrir de novo; se ele não fechou (a mesa avisa), feche pelo ícone da bandeja do Windows e abra pela mesa. Se a coleção de cenas em uso no OBS for outra, a mesa mostra o nome da coleção no cartão "Transições na coleção do OBS".
 - **O estinger não fica transparente.** Só vídeos .webm (VP9 ou VP8 com canal alfa) ou .mov com alfa têm transparência; .mp4 sempre cobre a tela inteira, o que também funciona como transição.
 - **O ouvinte diz "navegador sem reconhecimento de voz".** Abra `http://localhost:8080/ouvir` no Microsoft Edge ou no Google Chrome (o botão da mesa tenta o Edge, depois o Chrome). Firefox e a janela do próprio programa não têm esse recurso.

@@ -7,6 +7,7 @@
   const S = {
     obs: false, scenes: [], program: '', transitions: [], transition: '', transitionsFull: [], transitionDur: 300, transitionFixed: false,
     tsInfo: null, tsPend: { adicionar: [], remover: [] }, // transições na coleção do OBS e mudanças ainda não aplicadas
+    imagens: [], // imagens enviadas (logo, fundos)
     streaming: false, recording: false, lastStreamBytes: 0, lastStreamTs: 0,
     overlay: {}, roteiro: { itens: [], atual: -1 }, presets: { legendas: [], versiculos: [], avisos: [] },
     cams: [], config: null, info: null, editing: false, audioInputs: [],
@@ -57,7 +58,7 @@
       case 'presets': S.presets = m.presets; renderPresets(); break;
       case 'cams': S.cams = m.cams; renderCams(); updateTally(); break;
       case 'camStats': { const c = S.cams.find((x) => x.id === m.id); if (c) { c.meta = Object.assign({}, c.meta, m.stats); renderCams(); } break; }
-      case 'config': S.config = m.config; renderConfig(); renderDests(); renderHolyConfig(); renderReplayConfig(); renderTrConfig(); break;
+      case 'config': S.config = m.config; renderConfig(); renderDests(); renderHolyConfig(); renderReplayConfig(); renderTrConfig(); renderGrConfig(); break;
       case 'relay': S.relay = m.state; renderRelay(); break;
       case 'holyrics': S.holyrics = m.state; renderHoly(); break;
       case 'replay': S.replay = m.state; renderReplay(); break;
@@ -251,6 +252,10 @@
     set('#ttState', o.title && o.title.visible, 'oculto');
     set('#cdState', o.countdown && o.countdown.visible, 'oculta');
     set('#lyState', o.lyrics && o.lyrics.visible, 'oculta');
+    set('#ctState', o.cartao && o.cartao.visible, 'oculto');
+    set('#qrState', o.qr && o.qr.visible && o.qr.texto, 'oculto');
+    set('#lgState', o.logo && o.logo.visible && o.logo.url, 'oculta');
+    set('#rlState', o.relogio && o.relogio.visible, 'oculto');
   }
   $('#ltShow').addEventListener('click', () => overlayPatch({ lowerThird: { visible: true, title: $('#ltTitle').value, subtitle: $('#ltSubtitle').value } }));
   $('#ltHide').addEventListener('click', () => overlayPatch({ lowerThird: { visible: false } }));
@@ -264,7 +269,7 @@
   $('#cdHide').addEventListener('click', () => overlayPatch({ countdown: { visible: false } }));
   $('#clearAll').addEventListener('click', clearOverlay);
   function clearOverlay() {
-    overlayPatch({ lowerThird: { visible: false }, verse: { visible: false }, ticker: { visible: false }, title: { visible: false }, countdown: { visible: false } });
+    overlayPatch({ lowerThird: { visible: false }, verse: { visible: false }, ticker: { visible: false }, title: { visible: false }, countdown: { visible: false }, cartao: { visible: false } });
     if (S.config && S.config.holyrics && S.config.holyrics.naLive) hlySet({ naLive: false });
   }
   function countdownTarget() {
@@ -278,6 +283,11 @@
   $('#ltSave').addEventListener('click', () => { const t = $('#ltTitle').value.trim(); if (!t) return; S.presets.legendas.push({ title: t, subtitle: $('#ltSubtitle').value.trim() }); savePresets(); });
   $('#vsSave').addEventListener('click', () => { const r = $('#vsRef').value.trim(); if (!r) return; S.presets.versiculos.push({ ref: r, text: $('#vsText').value.trim() }); savePresets(); });
   $('#tkSave').addEventListener('click', () => { const t = $('#tkText').value.trim(); if (!t) return; S.presets.avisos.push(t); savePresets(); });
+  function cartaoAtual() { return { titulo: $('#ctTitulo').value.trim(), texto: $('#ctTexto').value.trim(), imagem: $('#ctImagem').value, cor: $('#ctCor').value }; }
+  function mostrarCartao(c) { overlayPatch({ cartao: Object.assign({ visible: true }, c, { imagem: c.imagem ? '/imagens/' + encodeURIComponent(c.imagem) : '' }) }); }
+  $('#ctShow').addEventListener('click', () => { const c = cartaoAtual(); if (!c.titulo && !c.texto && !c.imagem) return toast('Escreva um título, um texto ou escolha uma imagem', true); mostrarCartao(c); });
+  $('#ctHide').addEventListener('click', () => overlayPatch({ cartao: { visible: false } }));
+  $('#ctSave').addEventListener('click', () => { const c = cartaoAtual(); if (!c.titulo && !c.imagem) return toast('Dê um título ao cartão', true); S.presets.cartoes = S.presets.cartoes || []; S.presets.cartoes.push(c); savePresets(); toast('Modelo salvo'); });
   function renderPresets() {
     const mk = (box, list, label, onPick) => {
       box.innerHTML = '';
@@ -291,6 +301,8 @@
     mk($('#ltPresets'), S.presets.legendas, (p) => p.title + (p.subtitle ? ' · ' + p.subtitle : ''), (p) => { $('#ltTitle').value = p.title; $('#ltSubtitle').value = p.subtitle || ''; overlayPatch({ lowerThird: { visible: true, title: p.title, subtitle: p.subtitle || '' } }); });
     mk($('#vsPresets'), S.presets.versiculos, (p) => p.ref, (p) => { $('#vsRef').value = p.ref; $('#vsText').value = p.text || ''; overlayPatch({ verse: { visible: true, ref: p.ref, text: p.text || '' } }); });
     mk($('#tkPresets'), S.presets.avisos, (p) => p, (p) => { $('#tkText').value = p; overlayPatch({ ticker: { visible: true, text: p } }); });
+    mk($('#ctPresets'), S.presets.cartoes || [], (p) => p.titulo || p.imagem, (p) => { $('#ctTitulo').value = p.titulo || ''; $('#ctTexto').value = p.texto || ''; $('#ctImagem').value = p.imagem || ''; if (p.cor) $('#ctCor').value = p.cor; mostrarCartao(p); });
+    renderRiFields();
   }
 
   // ------------------------------------------------------------ Roteiro
@@ -318,7 +330,7 @@
   }
   function acaoLabel(a) {
     if (!a || a.tipo === 'none') return null;
-    const map = { clear: '🧹 limpar legendas', lower: '🔤 ' + (a.title || ''), verse: '📖 ' + (a.ref || ''), title: '🏷️ ' + (a.text || ''), ticker: '📣 aviso', countdown: '⏱ contagem ' + (a.minutes || 0) + ' min', letra: '🎵 letra do Holyrics', letraOff: '🎵 letra: ocultar' };
+    const map = { cartao: '🖼️ cartão: ' + (a.cartao || ''), cartaoOff: '🖼️ cartão: ocultar', qr: '▦ QR de oferta', qrOff: '▦ QR: ocultar', clear: '🧹 limpar legendas', lower: '🔤 ' + (a.title || ''), verse: '📖 ' + (a.ref || ''), title: '🏷️ ' + (a.text || ''), ticker: '📣 aviso', countdown: '⏱ contagem ' + (a.minutes || 0) + ' min', letra: '🎵 letra do Holyrics', letraOff: '🎵 letra: ocultar' };
     return map[a.tipo] || a.tipo;
   }
   function move(i, d) { const it = S.roteiro.itens; const j = i + d; if (j < 0 || j >= it.length) return; [it[i], it[j]] = [it[j], it[i]]; if (S.roteiro.atual === i) S.roteiro.atual = j; else if (S.roteiro.atual === j) S.roteiro.atual = i; saveRoteiro(); }
@@ -339,6 +351,10 @@
     if (a.tipo === 'countdown') return overlayPatch({ countdown: { visible: true, target: Date.now() + Number(a.minutes || 0) * 60000, message: a.message || '' } });
     if (a.tipo === 'letra') return hlySet({ naLive: true });
     if (a.tipo === 'letraOff') return hlySet({ naLive: false });
+    if (a.tipo === 'cartao') { const p = (S.presets.cartoes || []).find((c) => (c.titulo || c.imagem) === a.cartao); if (p) mostrarCartao(p); else toast('Modelo de cartão não encontrado: ' + a.cartao, true); return; }
+    if (a.tipo === 'cartaoOff') return overlayPatch({ cartao: { visible: false } });
+    if (a.tipo === 'qr') return grSet({ qr: { visible: true } });
+    if (a.tipo === 'qrOff') return grSet({ qr: { visible: false } });
   }
   $('#btnNext').addEventListener('click', () => nextItem(1));
   $('#btnPrev').addEventListener('click', () => nextItem(-1));
@@ -351,12 +367,17 @@
     if (t === 'verse') { f('riRef', 'Referência'); f('riText', 'Texto', true); }
     if (t === 'title' || t === 'ticker') f('riText', 'Texto');
     if (t === 'countdown') { f('riMinutes', 'Minutos'); f('riMessage', 'Mensagem'); }
+    if (t === 'cartao') {
+      const sel = el('select', { id: 'riCartao' });
+      for (const c of (S.presets.cartoes || [])) sel.append(el('option', { value: c.titulo || c.imagem, text: c.titulo || c.imagem }));
+      box.append(el('div', { class: 'field' }, [el('label', { text: (S.presets.cartoes || []).length ? 'Modelo de cartão (salvo na aba Gráficos)' : 'Salve um modelo de cartão na aba Gráficos primeiro' }), sel]));
+    }
   }
   $('#riAdd').addEventListener('click', () => {
     const titulo = $('#riTitulo').value.trim(); if (!titulo) return toast('Dê um título ao item', true);
     const tipo = $('#riAcao').value;
     const v = (id) => ($('#' + id) ? $('#' + id).value : '');
-    const acao = { tipo, title: v('riTitle'), subtitle: v('riSubtitle'), ref: v('riRef'), text: v('riText'), minutes: Number(v('riMinutes') || 0), message: v('riMessage') };
+    const acao = { tipo, title: v('riTitle'), subtitle: v('riSubtitle'), ref: v('riRef'), text: v('riText'), minutes: Number(v('riMinutes') || 0), message: v('riMessage'), cartao: v('riCartao') };
     const item = { titulo, cena: $('#riCena').value, acao };
     if ($('#riTrans').value) { item.transicao = $('#riTrans').value; if (Number($('#riTransDur').value)) item.transicaoDur = Number($('#riTransDur').value); }
     S.roteiro.itens.push(item);
@@ -964,6 +985,88 @@
     } catch (e) { msg.textContent = ''; toast('Não criou: ' + e.message, true); }
   });
 
+  // ---- Gráficos: tema, logo, QR, relógio (persistentes em config.graficos) e imagens
+  const CANTOS = { 'esq-cima': 'Esquerda, em cima', 'dir-cima': 'Direita, em cima', 'esq-baixo': 'Esquerda, embaixo', 'dir-baixo': 'Direita, embaixo' };
+  for (const sel of $$('.canto-sel')) for (const [k, v] of Object.entries(CANTOS)) sel.append(el('option', { value: k, text: v }));
+  let grEditing = false, grTimer = null;
+  async function grSet(patch) {
+    try {
+      const r = await (await fetch('/api/graficos', { method: 'PUT', body: JSON.stringify(patch) })).json();
+      if (r.error) throw new Error(r.error);
+      if (S.config) { S.config.graficos = r.graficos; renderGrConfig(); }
+    } catch (e) { toast('Não consegui salvar: ' + e.message, true); }
+  }
+  function grSetLento(patch) { clearTimeout(grTimer); grTimer = setTimeout(() => grSet(patch), 300); }
+  function renderGrConfig() {
+    const g = S.config && S.config.graficos; if (!g) return;
+    if (grEditing) return;
+    $('#tmCor').value = g.tema.cor; $('#tmFonte').value = g.tema.fonte; if (!$('#tmFonte').value) $('#tmFonte').value = 'Segoe UI';
+    $('#tmEstilo').value = g.tema.estilo; $('#tmLowerPos').value = g.tema.lowerPos; renderTmPreview();
+    $('#lgImagem').value = g.logo.arquivo || ''; $('#lgCanto').value = g.logo.canto; $('#lgTam').value = g.logo.tamanho; $('#lgTamVal').textContent = g.logo.tamanho; $('#lgOp').value = g.logo.opacidade; $('#lgOpVal').textContent = g.logo.opacidade; $('#lgVisible').checked = !!g.logo.visible;
+    $('#qrTexto').value = g.qr.texto; $('#qrRotulo').value = g.qr.rotulo; $('#qrCanto').value = g.qr.canto; $('#qrTam').value = g.qr.tamanho; $('#qrTamVal').textContent = g.qr.tamanho; $('#qrVisible').checked = !!g.qr.visible;
+    const pv = $('#qrPreview'); if (g.qr.texto) { pv.src = '/qr.svg?text=' + encodeURIComponent(g.qr.texto); pv.style.display = ''; } else pv.style.display = 'none';
+    $('#rlCanto').value = g.relogio.canto; $('#rlFormato').value = g.relogio.formato; $('#rlVisible').checked = !!g.relogio.visible;
+  }
+  function renderTmPreview() {
+    const p = $('#tmPreview');
+    p.className = 'tm-preview ' + $('#tmEstilo').value + ($('#tmLowerPos').value === 'centro' ? ' centro' : '');
+    p.style.setProperty('--accent', $('#tmCor').value); p.style.fontFamily = `"${$('#tmFonte').value}", sans-serif`;
+  }
+  for (const id of ['#tmCor', '#tmFonte', '#tmEstilo', '#tmLowerPos', '#qrTexto', '#qrRotulo', '#lgTam', '#lgOp', '#qrTam']) {
+    $(id).addEventListener('focus', () => { grEditing = true; }); $(id).addEventListener('blur', () => { grEditing = false; });
+  }
+  $('#tmCor').addEventListener('input', () => { renderTmPreview(); grSetLento({ tema: { cor: $('#tmCor').value } }); });
+  $('#tmFonte').addEventListener('change', () => { renderTmPreview(); grSet({ tema: { fonte: $('#tmFonte').value } }); });
+  $('#tmEstilo').addEventListener('change', () => { renderTmPreview(); grSet({ tema: { estilo: $('#tmEstilo').value } }); });
+  $('#tmLowerPos').addEventListener('change', () => { renderTmPreview(); grSet({ tema: { lowerPos: $('#tmLowerPos').value } }); });
+  $('#lgImagem').addEventListener('change', () => grSet({ logo: { arquivo: $('#lgImagem').value, visible: !!$('#lgImagem').value && $('#lgVisible').checked } }));
+  $('#lgCanto').addEventListener('change', () => grSet({ logo: { canto: $('#lgCanto').value } }));
+  $('#lgTam').addEventListener('input', () => { $('#lgTamVal').textContent = $('#lgTam').value; grSetLento({ logo: { tamanho: Number($('#lgTam').value) } }); });
+  $('#lgOp').addEventListener('input', () => { $('#lgOpVal').textContent = $('#lgOp').value; grSetLento({ logo: { opacidade: Number($('#lgOp').value) } }); });
+  $('#lgVisible').addEventListener('change', () => { if ($('#lgVisible').checked && !$('#lgImagem').value) { $('#lgVisible').checked = false; return toast('Escolha a imagem da logo (envie em "Imagens")', true); } grSet({ logo: { visible: $('#lgVisible').checked } }); });
+  $('#qrTexto').addEventListener('change', () => grSet({ qr: { texto: $('#qrTexto').value } }));
+  $('#qrRotulo').addEventListener('change', () => grSet({ qr: { rotulo: $('#qrRotulo').value } }));
+  $('#qrCanto').addEventListener('change', () => grSet({ qr: { canto: $('#qrCanto').value } }));
+  $('#qrTam').addEventListener('input', () => { $('#qrTamVal').textContent = $('#qrTam').value; grSetLento({ qr: { tamanho: Number($('#qrTam').value) } }); });
+  $('#qrVisible').addEventListener('change', () => { if ($('#qrVisible').checked && !$('#qrTexto').value.trim()) { $('#qrVisible').checked = false; return toast('Escreva o conteúdo do QR primeiro', true); } grSet({ qr: { visible: $('#qrVisible').checked, texto: $('#qrTexto').value, rotulo: $('#qrRotulo').value } }); });
+  $('#rlCanto').addEventListener('change', () => grSet({ relogio: { canto: $('#rlCanto').value } }));
+  $('#rlFormato').addEventListener('change', () => grSet({ relogio: { formato: $('#rlFormato').value } }));
+  $('#rlVisible').addEventListener('change', () => grSet({ relogio: { visible: $('#rlVisible').checked } }));
+
+  async function refreshImagens() {
+    try { S.imagens = (await (await fetch('/api/imagens')).json()).imagens || []; } catch { return; }
+    for (const id of ['#lgImagem', '#ctImagem']) {
+      const sel = $(id), cur = sel.value; sel.innerHTML = `<option value="">${id === '#lgImagem' ? '(nenhuma)' : '(cor do tema)'}</option>`;
+      for (const i of S.imagens) sel.append(el('option', { value: i.nome, text: i.nome }));
+      sel.value = cur; if (sel.value !== cur) sel.value = '';
+    }
+    const box = $('#imLista'); box.innerHTML = '';
+    for (const i of S.imagens) {
+      box.append(el('div', { class: 'im-item' }, [
+        el('img', { src: i.url, alt: i.nome, loading: 'lazy' }),
+        el('div', { class: 'nome', text: i.nome }),
+        el('div', { class: 'row', style: 'gap:4px' }, [
+          el('button', { class: 'small', text: 'Logo', title: 'Usar como logo', onclick: () => { $('#lgImagem').value = i.nome; grSet({ logo: { arquivo: i.nome, visible: true } }); } }),
+          el('button', { class: 'small', text: 'Fundo', title: 'Usar como fundo do cartão', onclick: () => { $('#ctImagem').value = i.nome; } }),
+          el('button', { class: 'small ghost danger', text: '✕', title: 'Apagar', onclick: async () => { if (!confirm(`Apagar "${i.nome}"?`)) return; await fetch('/api/imagens', { method: 'DELETE', body: JSON.stringify({ nome: i.nome }) }); refreshImagens(); } }),
+        ]),
+      ]));
+    }
+    if (!S.imagens.length) box.append(el('p', { class: 'muted', text: 'Nenhuma imagem ainda. Envie a logo da igreja e fundos para os cartões.' }));
+    renderGrConfig();
+  }
+  $('#imUpload').addEventListener('click', () => $('#imArquivo').click());
+  $('#imArquivo').addEventListener('change', async () => {
+    for (const f of $('#imArquivo').files) {
+      try {
+        const r = await (await fetch('/api/imagens', { method: 'POST', headers: { 'x-nome': encodeURIComponent(f.name), 'Content-Type': 'application/octet-stream' }, body: f })).json();
+        if (r.error) throw new Error(r.error);
+        toast(`Enviada: ${r.nome}`);
+      } catch (e) { toast('Não enviou ' + f.name + ': ' + e.message, true); }
+    }
+    $('#imArquivo').value = ''; refreshImagens();
+  });
+
   // ---- Transições na coleção do OBS (estinger etc.): mudam o arquivo da coleção e reiniciam o OBS
   async function refreshTransicoes() {
     try { S.tsInfo = await (await fetch('/api/transicoes')).json(); } catch (e) { toast(e.message, true); return; }
@@ -1181,6 +1284,7 @@
     if (b.dataset.tab === 'config') refreshSaida();
     if (b.dataset.tab === 'traducao') renderTrQr();
     if (b.dataset.tab === 'transicoes') refreshTransicoes();
+    if (b.dataset.tab === 'graficos') refreshImagens();
   });
   function setBadge(elm, cls, label) { elm.className = 'badge ' + cls; elm.innerHTML = `<span class="dot ${cls}"></span>${label}`; }
   let toastTimer;

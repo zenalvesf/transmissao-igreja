@@ -61,6 +61,12 @@ const DEFAULT_CONFIG = {
     provedor: 'anthropic', chave: '', modelo: 'claude-opus-5-5',
     naLive: false, idiomaLive: 'en', // legenda traduzida por cima da transmissão
   },
+  graficos: { // visual do overlay (tema, logo, QR de oferta, relógio); persistente
+    tema: { cor: '#4f8cff', fonte: 'Segoe UI', estilo: 'classico', lowerPos: 'esquerda' },
+    logo: { visible: false, arquivo: '', canto: 'dir-cima', tamanho: 160, opacidade: 85 },
+    qr: { visible: false, texto: '', rotulo: 'Ofertas · PIX', canto: 'dir-baixo', tamanho: 220 },
+    relogio: { visible: false, canto: 'esq-cima', formato: '24h' },
+  },
 };
 
 function readJson(file, fallback) {
@@ -78,12 +84,14 @@ config.holyrics = Object.assign({}, DEFAULT_CONFIG.holyrics, config.holyrics || 
 config.holyrics.estilo = Object.assign({}, DEFAULT_CONFIG.holyrics.estilo, config.holyrics.estilo || {});
 config.replay = Object.assign({}, DEFAULT_CONFIG.replay, config.replay || {});
 config.traducao = Object.assign({}, DEFAULT_CONFIG.traducao, config.traducao || {});
+config.graficos = config.graficos || {};
+for (const k of Object.keys(DEFAULT_CONFIG.graficos)) config.graficos[k] = Object.assign({}, DEFAULT_CONFIG.graficos[k], config.graficos[k] || {});
 if (!Array.isArray(config.relay.destinos)) config.relay.destinos = JSON.parse(JSON.stringify(DEFAULT_CONFIG.relay.destinos));
 if (!fs.existsSync(CONFIG_PATH)) writeJson(CONFIG_PATH, config);
 
 // ---------------------------------------------------------------- estado persistente
 let roteiro = readJson(path.join(DATA, 'roteiro.json'), { itens: [], atual: -1 });
-let presets = readJson(path.join(DATA, 'presets.json'), { legendas: [], versiculos: [], avisos: [] });
+let presets = Object.assign({ legendas: [], versiculos: [], avisos: [], cartoes: [] }, readJson(path.join(DATA, 'presets.json'), {}));
 
 let overlay = {
   lowerThird: { visible: false, title: '', subtitle: '' },
@@ -92,7 +100,19 @@ let overlay = {
   countdown: { visible: false, target: 0, message: '' },
   title: { visible: false, text: '' },
   lyrics: { visible: false, text: '', title: '', kind: '', estilo: {} }, // letra vinda do Holyrics
+  cartao: { visible: false, titulo: '', texto: '', imagem: '', cor: '' }, // cartão em tela cheia
 };
+const CANTOS = ['esq-cima', 'dir-cima', 'esq-baixo', 'dir-baixo'];
+/** Copia tema, logo, QR e relógio da configuração para o overlay (e avisa todo mundo). */
+function syncGraficos(avisar = true) {
+  const g = config.graficos;
+  overlay.tema = Object.assign({}, g.tema);
+  overlay.logo = Object.assign({}, g.logo, { url: g.logo.arquivo ? '/imagens/' + encodeURIComponent(g.logo.arquivo) : '' });
+  overlay.qr = Object.assign({}, g.qr);
+  overlay.relogio = Object.assign({}, g.relogio);
+  if (avisar) { broadcast('overlay', { type: 'overlay', overlay }); broadcast('mesa', { type: 'overlay', overlay }); }
+}
+syncGraficos(false);
 
 // ---------------------------------------------------------------- utilidades
 function lanIps() {
@@ -127,7 +147,7 @@ function ensureCert() {
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8',
-  '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json',
+  '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json',
   '.mp4': 'video/mp4', '.webm': 'video/webm', '.mov': 'video/quicktime', '.mkv': 'video/x-matroska', '.avi': 'video/x-msvideo',
 };
 
@@ -168,6 +188,7 @@ async function handleHttp(req, res) {
   }
 
   if (p.startsWith('/estingers/')) return serveFile(res, path.join(DATA, 'estingers', path.basename(decodeURIComponent(p)))); // vídeos de estinger enviados pela mesa
+  if (p.startsWith('/imagens/')) return serveFile(res, path.join(DATA, 'imagens', path.basename(decodeURIComponent(p)))); // logo, fundos de cartão
   if (PAGES[p]) return serveFile(res, path.join(PUBLIC, PAGES[p]));
   if (p.startsWith('/view/')) return serveFile(res, path.join(PUBLIC, 'view.html'));
 
@@ -188,32 +209,75 @@ function publicConfig() {
 }
 
 const ESTINGER_EXT = ['.mp4', '.webm', '.mov', '.mkv', '.avi'];
-/** Recebe o vídeo de um estinger (corpo bruto, nome no cabeçalho x-nome) e guarda em data/estingers. */
-function receberEstinger(req, res) {
+const IMAGEM_EXT = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'];
+/** Recebe um arquivo enviado pela mesa (corpo bruto, nome no cabeçalho x-nome) e guarda em data/<pasta>. */
+function receberArquivo(req, res, { pasta, exts, max, rotulo }) {
   return new Promise((resolve) => {
-    let nomeOrig = 'estinger.mp4'; try { nomeOrig = decodeURIComponent(req.headers['x-nome'] || nomeOrig); } catch { /* nome inválido */ }
+    let nomeOrig = 'arquivo'; try { nomeOrig = decodeURIComponent(req.headers['x-nome'] || nomeOrig); } catch { /* nome inválido */ }
     const ext = path.extname(nomeOrig).toLowerCase();
-    if (!ESTINGER_EXT.includes(ext)) { sendJson(res, { error: 'Use um vídeo .webm, .mp4, .mov, .mkv ou .avi' }, 400); req.resume(); return resolve(); }
-    if (Number(req.headers['content-length'] || 0) > 500e6) { sendJson(res, { error: 'Vídeo grande demais (máximo 500 MB)' }, 400); req.resume(); return resolve(); }
-    const nome = (path.basename(nomeOrig, ext).replace(/[^\w.\- ]+/g, '_').slice(0, 60) || 'estinger') + ext;
-    const dir = path.join(DATA, 'estingers'); fs.mkdirSync(dir, { recursive: true });
+    if (!exts.includes(ext)) { sendJson(res, { error: `Use ${rotulo} ${exts.join(', ')}` }, 400); req.resume(); return resolve(); }
+    if (Number(req.headers['content-length'] || 0) > max) { sendJson(res, { error: `Arquivo grande demais (máximo ${Math.round(max / 1e6)} MB)` }, 400); req.resume(); return resolve(); }
+    const nome = (path.basename(nomeOrig, ext).replace(/[^\w.\- ]+/g, '_').slice(0, 60) || 'arquivo') + ext;
+    const dir = path.join(DATA, pasta); fs.mkdirSync(dir, { recursive: true });
     const file = path.join(dir, nome), out = fs.createWriteStream(file);
     let bytes = 0;
-    req.on('data', (c) => { bytes += c.length; if (bytes > 500e6) req.destroy(new Error('grande demais')); });
+    req.on('data', (c) => { bytes += c.length; if (bytes > max) req.destroy(new Error('grande demais')); });
     req.on('error', () => { out.destroy(); try { fs.unlinkSync(file); } catch { /* nada */ } if (!res.headersSent) sendJson(res, { error: 'Envio interrompido' }, 400); resolve(); });
     out.on('error', (e) => { if (!res.headersSent) sendJson(res, { error: e.message }, 500); resolve(); });
-    out.on('finish', () => { sendJson(res, { ok: true, nome, arquivo: file, url: '/estingers/' + encodeURIComponent(nome), bytes }); resolve(); });
+    out.on('finish', () => { sendJson(res, { ok: true, nome, arquivo: file, url: '/' + pasta + '/' + encodeURIComponent(nome), bytes }); resolve(); });
     req.pipe(out);
   });
 }
-function listarEstingers() {
-  const dir = path.join(DATA, 'estingers');
-  try { return fs.readdirSync(dir).filter((f) => ESTINGER_EXT.includes(path.extname(f).toLowerCase())).map((f) => ({ nome: f, arquivo: path.join(dir, f), url: '/estingers/' + encodeURIComponent(f) })); } catch { return []; }
+function listarArquivos(pasta, exts) {
+  const dir = path.join(DATA, pasta);
+  try { return fs.readdirSync(dir).filter((f) => exts.includes(path.extname(f).toLowerCase())).sort().map((f) => ({ nome: f, arquivo: path.join(dir, f), url: '/' + pasta + '/' + encodeURIComponent(f) })); } catch { return []; }
 }
+function listarEstingers() { return listarArquivos('estingers', ESTINGER_EXT); }
+function listarImagens() { return listarArquivos('imagens', IMAGEM_EXT); }
 
 async function handleApi(req, res, p) {
   try {
-    if (p === '/api/transicoes/arquivo' && req.method === 'POST') return receberEstinger(req, res);
+    if (p === '/api/transicoes/arquivo' && req.method === 'POST') return receberArquivo(req, res, { pasta: 'estingers', exts: ESTINGER_EXT, max: 500e6, rotulo: 'um vídeo' });
+    if (p === '/api/imagens' && req.method === 'POST') return receberArquivo(req, res, { pasta: 'imagens', exts: IMAGEM_EXT, max: 25e6, rotulo: 'uma imagem' });
+    if (p === '/api/imagens' && req.method === 'GET') return sendJson(res, { imagens: listarImagens() });
+    if (p === '/api/imagens' && req.method === 'DELETE') {
+      const body = await readBody(req);
+      const f = listarImagens().find((e) => e.nome === body.nome);
+      if (f) { fs.unlinkSync(f.arquivo); if (config.graficos.logo.arquivo === f.nome) { config.graficos.logo.arquivo = ''; config.graficos.logo.visible = false; writeJson(CONFIG_PATH, config); syncGraficos(); } }
+      return sendJson(res, { ok: !!f, imagens: listarImagens() });
+    }
+    // Gráficos do overlay: tema, logo, QR, relógio (persistentes)
+    if (p === '/api/graficos' && req.method === 'GET') return sendJson(res, { graficos: config.graficos, imagens: listarImagens() });
+    if (p === '/api/graficos' && req.method === 'PUT') {
+      const b = await readBody(req), g = config.graficos;
+      const str = (v, max) => typeof v === 'string' ? v.trim().slice(0, max) : undefined;
+      const num = (v, lo, hi) => (v === undefined || v === null || v === '' ? undefined : Math.max(lo, Math.min(hi, Number(v) || lo)));
+      const canto = (v) => CANTOS.includes(v) ? v : undefined;
+      const setIf = (obj, k, v) => { if (v !== undefined) obj[k] = v; };
+      if (b.tema) {
+        setIf(g.tema, 'cor', /^#[0-9a-f]{6}$/i.test(b.tema.cor || '') ? b.tema.cor.toLowerCase() : undefined);
+        setIf(g.tema, 'fonte', str(b.tema.fonte, 60));
+        setIf(g.tema, 'estilo', ['classico', 'moderno', 'arredondado'].includes(b.tema.estilo) ? b.tema.estilo : undefined);
+        setIf(g.tema, 'lowerPos', ['esquerda', 'centro'].includes(b.tema.lowerPos) ? b.tema.lowerPos : undefined);
+      }
+      if (b.logo) {
+        if (b.logo.visible !== undefined) g.logo.visible = !!b.logo.visible;
+        if (typeof b.logo.arquivo === 'string') g.logo.arquivo = listarImagens().some((i) => i.nome === b.logo.arquivo) ? b.logo.arquivo : '';
+        setIf(g.logo, 'canto', canto(b.logo.canto)); setIf(g.logo, 'tamanho', num(b.logo.tamanho, 40, 800)); setIf(g.logo, 'opacidade', num(b.logo.opacidade, 10, 100));
+      }
+      if (b.qr) {
+        if (b.qr.visible !== undefined) g.qr.visible = !!b.qr.visible;
+        setIf(g.qr, 'texto', str(b.qr.texto, 500)); setIf(g.qr, 'rotulo', str(b.qr.rotulo, 60)); setIf(g.qr, 'canto', canto(b.qr.canto)); setIf(g.qr, 'tamanho', num(b.qr.tamanho, 100, 600));
+      }
+      if (b.relogio) {
+        if (b.relogio.visible !== undefined) g.relogio.visible = !!b.relogio.visible;
+        setIf(g.relogio, 'canto', canto(b.relogio.canto)); setIf(g.relogio, 'formato', ['24h', '12h'].includes(b.relogio.formato) ? b.relogio.formato : undefined);
+      }
+      writeJson(CONFIG_PATH, config);
+      syncGraficos();
+      broadcast('mesa', { type: 'config', config: publicConfig() });
+      return sendJson(res, { graficos: config.graficos });
+    }
     if (p === '/api/info') {
       return sendJson(res, {
         ips: lanIps(), httpPort: config.httpPort, httpsPort: config.httpsPort,
